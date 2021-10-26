@@ -34,7 +34,7 @@ interface IRaisyNFT {
         uint256 creationTimestamp;
     }
 
-    function mint(donationInfo calldata) external;
+    function mint(DonationInfo calldata) external returns (uint256);
 }
 
 /// @title Main Smart Contract of the architecture
@@ -48,6 +48,37 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     /// @notice Events for the contract
+    event CampaignCreated(
+        uint256 id,
+        address indexed creator,
+        uint256 duration,
+        uint256 startBlock,
+        uint256 amountToRaise,
+        bool hasReleaseSchedule
+    );
+
+    event NewDonation(
+        uint256 campaignId,
+        address indexed donor,
+        uint256 amount,
+        address indexed payToken
+    );
+
+    event ProofOfDonationClaimed(
+        uint256 campaignId,
+        address indexed donor,
+        uint256 tokenId
+    );
+
+    event FundsClaimed(
+        uint256 campaignId,
+        address indexed creator
+    );
+
+    event AddressRegistryUpdated(
+        address indexed newAddressRegistry
+    );
+
 
     /// @notice Structure for a campaign
     struct Campaign {
@@ -139,6 +170,14 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         campaignExistence[campaignId] = true;
 
         // Emit creation event
+        emit CampaignCreated(
+            campaignId,
+            msg.sender,
+            _duration,
+            block.number,
+            _amountToRaise,
+            _hasReleaseSchedule
+        );
     }
 
     function donate(
@@ -158,6 +197,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         userDonations[msg.sender][_campaignId] += _amount;
 
         // Emit donation event
+        emit NewDonation(_campaignId, msg.sender, _amount, _payToken);
     }
 
     function claimProofOfDonation(uint256 _campaignId)
@@ -179,12 +219,13 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             block.timestamp
         );
 
-        raisyNFT.mint(donationInfo);
+        uint256 tokenId = raisyNFT.mint(donationInfo);
 
         // Reset his donation amount
         userDonations[msg.sender][_campaignId] = 0;
 
         // Emit the claim event
+        emit ProofOfDonationClaimed(_campaignId, msg.sender, tokenId);
     }
 
     function claimFunds(uint256 _campaignId)
@@ -198,7 +239,9 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "You're not the creator ."
         );
 
-        if (allCampaigns[_campaignId].hasReleaseSchedule) {} else {
+        if (allCampaigns[_campaignId].hasReleaseSchedule) {
+            // Trigger state change on RaisyFundsRelease
+        } else {
             // Transfer the funds to the campaign's creator
             IERC20 payToken = IERC20(addressRegistry.raisyToken());
             payToken.safeTransferFrom(
@@ -212,6 +255,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         allCampaigns[_campaignId].isOver = true;
 
         // Emit the claim event
+        emit FundsClaimed(_campaignId, msg.sender);
     }
 
     /**
@@ -220,5 +264,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      */
     function updateAddressRegistry(address _registry) external onlyOwner {
         addressRegistry = IRaisyAddressRegistry(_registry);
+
+        emit AddressRegistryUpdated(_registry);
     }
 }
