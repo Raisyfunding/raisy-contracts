@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.0;
 
-
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -11,9 +10,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * RaisyNFT - ERC721 contract that whitelists a trading address, and has minting functionality.
  */
 contract RaisyNFT is ERC721, Ownable {
-    mapping(uint256 => donationInfo) private _donationInfo;
+    mapping(uint256 => DonationInfo) private _donationInfo;
 
-    struct donationInfo {
+    struct DonationInfo {
         uint256 amount;
         address tokenUsed;
         uint256 campaignId;
@@ -33,13 +32,16 @@ contract RaisyNFT is ERC721, Ownable {
      * @dev Mints a token to an address with a tokenURI.
      */
 
-    function mint(donationInfo calldata params) external returns (uint256) {
-
+    function mint(DonationInfo calldata params)
+        external
+        onlyOwner
+        returns (uint256)
+    {
         uint256 newTokenId = _getNextTokenId();
         _safeMint(params.recipient, newTokenId);
         _donationInfo[newTokenId] = params;
         emit Minted(newTokenId, params);
-        
+
         return newTokenId;
     }
 
@@ -50,9 +52,7 @@ contract RaisyNFT is ERC721, Ownable {
     */
     function burn(uint256 _tokenId) external {
         address operator = _msgSender();
-        require(
-            ownerOf(_tokenId) == operator
-        );
+        require(ownerOf(_tokenId) == operator);
 
         // Destroy token mappings
         _burn(_tokenId);

@@ -26,7 +26,7 @@ interface IRaisyChef {
 }
 
 interface IRaisyNFT {
-    struct donationInfo {
+    struct DonationInfo {
         uint256 amount;
         address tokenUsed;
         uint256 campaignId;
@@ -171,7 +171,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         // Mint Raisy NFT
         IRaisyNFT raisyNFT = IRaisyNFT(addressRegistry.raisyNFT());
 
-        IRaisyNFT.donationInfo memory donationInfo = IRaisyNFT.donationInfo(
+        IRaisyNFT.DonationInfo memory donationInfo = IRaisyNFT.DonationInfo(
             userDonations[msg.sender][_campaignId],
             addressRegistry.raisyToken(),
             _campaignId,
