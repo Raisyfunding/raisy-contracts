@@ -3,11 +3,11 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./RaisyToken.sol";
 
 // RaisyChef is the master of the raisy campaigns.
@@ -20,7 +20,8 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
     // Info of each user.
     struct UserInfo {
-        uint256 amount; // How many LP tokens the user has provided.
+        uint256 amount; // How many tokens the user has provided.
+        uint256 rewardDebt;
         //
         // We do some fancy math here. Basically, at any point in time, the
         // amount of RAISY
@@ -54,32 +55,16 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
     // The RAISY token
     RaisyToken public Raisy;
-    //An ETH/USDC Oracle (Chainlink)
-    address public usdOracle;
     // Dev address.
     address public devaddr;
     // DAO Treasury Address
     address public daotreasuryaddr;
     // RAISY created per block.
     uint256 public REWARD_PER_BLOCK;
-    // Bonus multiplier for early JEWEL makers.
-    uint256[] public REWARD_MULTIPLIER; // init in constructor function
-    uint256[] public HALVING_AT_BLOCK; // init in constructor function
-    uint256[] public blockDeltaStartStage;
-    uint256[] public blockDeltaEndStage;
-    uint256[] public userFeeStage;
-    uint256[] public devFeeStage;
-    uint256 public FINISH_BONUS_AT_BLOCK;
-    uint256 public userDepFee;
-    uint256 public devDepFee;
 
     // @notice The block number when RAISY mining starts.
     uint256 public START_BLOCK;
 
-    // @notice Total raisy staked in all pools
-    uint256 public totalRaisyStaked;
-
-    uint256[] public PERCENT_LOCK_BONUS_REWARD; // lock xx% of bounus reward
     uint256 public PERCENT_FOR_DEV; // dev bounties
     uint256 public PERCENT_FOR_DAO; // DAO Treasury
 
@@ -94,9 +79,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     // @notice Info of each user that stakes LP tokens. pid => user address => info
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
     mapping(address => UserGlobalInfo) public userGlobalInfo;
-    mapping(IERC20 => bool) public poolExistence;
-    // @notice Total allocation poitns. Must be the sum of all allocation points in all pools.
-    uint256 public totalAllocPoint = 0;
+    mapping(uint256 => bool) public poolExistence;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
@@ -108,8 +91,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     event SendGovernanceTokenReward(
         address indexed user,
         uint256 indexed pid,
-        uint256 amount,
-        uint256 lockAmount
+        uint256 amount
     );
 
     modifier nonDuplicated(uint256 _campaignId) {
@@ -126,40 +108,14 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         address _daotreasuryaddr,
         uint256 _rewardPerBlock,
         uint256 _lockDuration,
-        uint256 _startBlock,
-        uint256 _halvingAfterBlock,
-        uint256 _userDepFee,
-        uint256 _devDepFee,
-        uint256[] memory _rewardMultiplier,
-        uint256[] memory _blockDeltaStartStage,
-        uint256[] memory _blockDeltaEndStage,
-        uint256[] memory _userFeeStage,
-        uint256[] memory _devFeeStage
-    ) public {
+        uint256 _startBlock
+    ) {
         Raisy = _Raisy;
         devaddr = _devaddr;
         daotreasuryaddr = _daotreasuryaddr;
         REWARD_PER_BLOCK = _rewardPerBlock;
         START_BLOCK = _startBlock;
         LOCK_DURATION = _lockDuration;
-        userDepFee = _userDepFee;
-        devDepFee = _devDepFee;
-        REWARD_MULTIPLIER = _rewardMultiplier;
-        blockDeltaStartStage = _blockDeltaStartStage;
-        blockDeltaEndStage = _blockDeltaEndStage;
-        userFeeStage = _userFeeStage;
-        devFeeStage = _devFeeStage;
-        for (uint256 i = 0; i < REWARD_MULTIPLIER.length - 1; i++) {
-            uint256 halvingAtBlock = _halvingAfterBlock
-                .mul(i + 1)
-                .add(_startBlock)
-                .add(1);
-            HALVING_AT_BLOCK.push(halvingAtBlock);
-        }
-        FINISH_BONUS_AT_BLOCK = _halvingAfterBlock
-            .mul(REWARD_MULTIPLIER.length - 1)
-            .add(_startBlock);
-        HALVING_AT_BLOCK.push(uint256(-1));
     }
 
     function poolLength() external view returns (uint256) {
@@ -167,15 +123,13 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     }
 
     // Add a new campaign pool. Can only be called by the owner.
-    function add(
-        uint256 _campaignId,
-        uint256 _endBlock
-    ) external onlyOwner nonDuplicated(_campaignId) {
-        require(
-            poolId1[_campaignId] == 0,
-            "RaisyChef::add: id already exists"
-        );
-       
+    function add(uint256 _campaignId, uint256 _endBlock)
+        external
+        onlyOwner
+        nonDuplicated(_campaignId)
+    {
+        require(poolId1[_campaignId] == 0, "RaisyChef::add: id already exists");
+
         uint256 lastRewardBlock = block.number > START_BLOCK
             ? block.number
             : START_BLOCK;
@@ -226,10 +180,11 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         }
         uint256 RaisyForFarmer;
         uint256 RaisyForDao;
-        (
-            RaisyForFarmer,
-            RaisyForDao
-        ) = getPoolReward(pool.lastRewardBlock, block.number, pool.daoBonusMultiplier);
+        (RaisyForFarmer, RaisyForDao) = getPoolReward(
+            pool.lastRewardBlock,
+            block.number,
+            pool.daoBonusMultiplier
+        );
 
         // Mint some new RAISY tokens for the farmer and store them in RaisyChef.
         Raisy.mint(address(this), RaisyForFarmer);
@@ -239,76 +194,23 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         );
 
         pool.lastRewardBlock = block.number;
-        
+
         if (RaisyForDao > 0) {
             Raisy.mint(daotreasuryaddr, RaisyForDao);
         }
-    }
-
-    // |--------------------------------------|
-    // [20, 30, 40, 50, 60, 70, 80, 99999999]
-    // Return reward multiplier over the given _from to _to block.
-    function getMultiplier(uint256 _from, uint256 _to)
-        public
-        view
-        returns (uint256)
-    {
-        uint256 result = 0;
-        if (_from < START_BLOCK) return 0;
-
-        for (uint256 i = 0; i < HALVING_AT_BLOCK.length; i++) {
-            uint256 endBlock = HALVING_AT_BLOCK[i];
-            if (i > REWARD_MULTIPLIER.length - 1) return 0;
-
-            if (_to <= endBlock) {
-                uint256 m = _to.sub(_from).mul(REWARD_MULTIPLIER[i]);
-                return result.add(m);
-            }
-
-            if (_from < endBlock) {
-                uint256 m = endBlock.sub(_from).mul(REWARD_MULTIPLIER[i]);
-                _from = endBlock;
-                result = result.add(m);
-            }
-        }
-
-        return result;
-    }
-
-    function getLockPercentage(uint256 _from, uint256 _to)
-        public
-        view
-        returns (uint256)
-    {
-        uint256 result = 0;
-        if (_from < START_BLOCK) return 100;
-
-        for (uint256 i = 0; i < HALVING_AT_BLOCK.length; i++) {
-            uint256 endBlock = HALVING_AT_BLOCK[i];
-            if (i > PERCENT_LOCK_BONUS_REWARD.length - 1) return 0;
-
-            if (_to <= endBlock) {
-                return PERCENT_LOCK_BONUS_REWARD[i];
-            }
-        }
-
-        return result;
     }
 
     function getPoolReward(
         uint256 _from,
         uint256 _to,
         uint256 _daoBonusMultiplier
-    )
-        public
-        view
-        returns (
-            uint256 forFarmer,
-            uint256 forDao
-        )
-    {
-        uint256 amount = _to.sub(_from).mul(REWARD_PER_BLOCK).mul(_daoBonusMultiplier);
-        uint256 GovernanceTokenCanMint = Raisy.cap().sub(Raisy.totalSupply());
+    ) public view returns (uint256 forFarmer, uint256 forDao) {
+        uint256 amount = _to.sub(_from).mul(REWARD_PER_BLOCK).mul(
+            _daoBonusMultiplier
+        );
+        uint256 GovernanceTokenCanMint = Raisy.maxsupplycap().sub(
+            Raisy.totalSupply()
+        );
 
         if (GovernanceTokenCanMint < amount) {
             // If there aren't enough governance tokens left to mint before the cap,
@@ -332,13 +234,13 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accRaisyPerShare = pool.accRaisyPerShare;
-        uint256 lpSupply = pool.lpToken.balanceOf(address(this));
+        uint256 lpSupply = Raisy.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply > 0) {
             uint256 RaisyForFarmer;
-            (, RaisyForFarmer, , , ) = getPoolReward(
+            (RaisyForFarmer, ) = getPoolReward(
                 pool.lastRewardBlock,
                 block.number,
-                pool.allocPoint
+                pool.daoBonusMultiplier
             );
             accRaisyPerShare = accRaisyPerShare.add(
                 RaisyForFarmer.mul(1e12).div(lpSupply)
@@ -389,22 +291,20 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                 // those tokens from RaisyChef to their wallet.
                 uint256 rewards;
 
-                if(block.number >= pool.endBlock + LOCK_DURATION) {
-                  // Transfer all the rewards if the linear vesting is finished
-                  rewards = pending;
+                if (block.number >= pool.endBlock + LOCK_DURATION) {
+                    // Transfer all the rewards if the linear vesting is finished
+                    rewards = pending;
                 } else {
-                  // Transfer rewards determined by the linear vesting ratio
-                  uint256 unlock_pct = block.number.sub(pool.endBlock).div(LOCK_DURATION);
-                  rewards = pending.mul(unlock_pct);
+                    // Transfer rewards determined by the linear vesting ratio
+                    uint256 unlock_pct = block.number.sub(pool.endBlock).div(
+                        LOCK_DURATION
+                    );
+                    rewards = pending.mul(unlock_pct);
                 }
 
                 Raisy.transfer(msg.sender, rewards);
 
-                emit SendGovernanceTokenReward(
-                    msg.sender,
-                    _pid,
-                    rewards
-                );
+                emit SendGovernanceTokenReward(msg.sender, _pid, rewards);
             }
 
             // Recalculate the rewardDebt for the user.
@@ -418,10 +318,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     }
 
     // Deposit Raisy in a pool to RaisyChef for RAISY allocation.
-    function deposit(
-        uint256 _pid,
-        uint256 _amount
-    ) public nonReentrant {
+    function deposit(uint256 _pid, uint256 _amount) public nonReentrant {
         require(
             _amount > 0,
             "RaisyChef::deposit: amount must be greater than 0"
@@ -429,189 +326,151 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
-        UserInfo storage devr = userInfo[_pid][devaddr];
-        UserGlobalInfo storage refer = userGlobalInfo[_ref];
-        UserGlobalInfo storage current = userGlobalInfo[msg.sender];
-
-        current.globalAmount =
-            current.globalAmount +
-            _amount.mul(userDepFee).div(100);
+        // UserGlobalInfo storage current = userGlobalInfo[msg.sender];
 
         // When a user deposits, we need to update the pool and harvest beforehand,
         // since the rates will change.
         updatePool(_pid);
         _harvest(_pid);
-        pool.lpToken.safeTransferFrom(
+
+        IERC20(Raisy).safeTransferFrom(
             address(msg.sender),
             address(this),
             _amount
         );
-        if (user.amount == 0) {
-            user.rewardDebtAtBlock = block.number;
-        }
-        user.amount = user.amount.add(
-            _amount.sub(_amount.mul(userDepFee).div(10000))
-        );
+
+        user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
-        devr.amount = devr.amount.add(
-            _amount.sub(_amount.mul(devDepFee).div(10000))
-        );
-        devr.rewardDebt = devr.amount.mul(pool.accRaisyPerShare).div(1e12);
+
         emit Deposit(msg.sender, _pid, _amount);
-        if (user.firstDepositBlock > 0) {} else {
-            user.firstDepositBlock = block.number;
-        }
-        user.lastDepositBlock = block.number;
     }
 
-    // Withdraw LP tokens from MasterGardener.
-    function withdraw(
-        uint256 _pid,
-        uint256 _amount,
-        address _ref
-    ) public nonReentrant {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        UserGlobalInfo storage refer = userGlobalInfo[_ref];
-        UserGlobalInfo storage current = userGlobalInfo[msg.sender];
-        require(user.amount >= _amount, "MasterGardener::withdraw: not good");
-        if (_ref != address(0)) {
-            refer.referrals[msg.sender] = refer.referrals[msg.sender] - _amount;
-            refer.globalRefAmount = refer.globalRefAmount - _amount;
-        }
-        current.globalAmount = current.globalAmount - _amount;
+    // // Withdraw LP tokens from MasterGardener.
+    // function withdraw(uint256 _pid, uint256 _amount) public nonReentrant {
+    //     PoolInfo storage pool = poolInfo[_pid];
+    //     UserInfo storage user = userInfo[_pid][msg.sender];
+    //     UserGlobalInfo storage current = userGlobalInfo[msg.sender];
+    //     require(user.amount >= _amount, "RaisyChef::withdraw: not good");
 
-        updatePool(_pid);
-        _harvest(_pid);
+    //     current.globalAmount = current.globalAmount - _amount;
 
-        if (_amount > 0) {
-            user.amount = user.amount.sub(_amount);
-            if (user.lastWithdrawBlock > 0) {
-                user.blockdelta = block.number - user.lastWithdrawBlock;
-            } else {
-                user.blockdelta = block.number - user.firstDepositBlock;
-            }
-            if (
-                user.blockdelta == blockDeltaStartStage[0] ||
-                block.number == user.lastDepositBlock
-            ) {
-                //25% fee for withdrawals of LP tokens in the same block this is to prevent abuse from flashloans
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[0]).div(100)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[0]).div(100)
-                );
-            } else if (
-                user.blockdelta >= blockDeltaStartStage[1] &&
-                user.blockdelta <= blockDeltaEndStage[0]
-            ) {
-                //8% fee if a user deposits and withdraws in between same block and 59 minutes.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[1]).div(100)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[1]).div(100)
-                );
-            } else if (
-                user.blockdelta >= blockDeltaStartStage[2] &&
-                user.blockdelta <= blockDeltaEndStage[1]
-            ) {
-                //4% fee if a user deposits and withdraws after 1 hour but before 1 day.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[2]).div(100)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[2]).div(100)
-                );
-            } else if (
-                user.blockdelta >= blockDeltaStartStage[3] &&
-                user.blockdelta <= blockDeltaEndStage[2]
-            ) {
-                //2% fee if a user deposits and withdraws between after 1 day but before 3 days.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[3]).div(100)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[3]).div(100)
-                );
-            } else if (
-                user.blockdelta >= blockDeltaStartStage[4] &&
-                user.blockdelta <= blockDeltaEndStage[3]
-            ) {
-                //1% fee if a user deposits and withdraws after 3 days but before 5 days.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[4]).div(100)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[4]).div(100)
-                );
-            } else if (
-                user.blockdelta >= blockDeltaStartStage[5] &&
-                user.blockdelta <= blockDeltaEndStage[4]
-            ) {
-                //0.5% fee if a user deposits and withdraws if the user withdraws after 5 days but before 2 weeks.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[5]).div(1000)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[5]).div(1000)
-                );
-            } else if (
-                user.blockdelta >= blockDeltaStartStage[6] &&
-                user.blockdelta <= blockDeltaEndStage[5]
-            ) {
-                //0.25% fee if a user deposits and withdraws after 2 weeks.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[6]).div(10000)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[6]).div(10000)
-                );
-            } else if (user.blockdelta > blockDeltaStartStage[7]) {
-                //0.1% fee if a user deposits and withdraws after 4 weeks.
-                pool.lpToken.safeTransfer(
-                    address(msg.sender),
-                    _amount.mul(userFeeStage[7]).div(10000)
-                );
-                pool.lpToken.safeTransfer(
-                    address(devaddr),
-                    _amount.mul(devFeeStage[7]).div(10000)
-                );
-            }
-            user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
-            emit Withdraw(msg.sender, _pid, _amount);
-            user.lastWithdrawBlock = block.number;
-        }
-    }
+    //     updatePool(_pid);
+    //     _harvest(_pid);
 
-    // Withdraw without caring about rewards. EMERGENCY ONLY. This has the same 25% fee as same block withdrawals to prevent abuse of thisfunction.
-    function emergencyWithdraw(uint256 _pid) public nonReentrant {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        //reordered from Sushi function to prevent risk of reentrancy
-        uint256 amountToSend = user.amount.mul(75).div(100);
-        uint256 devToSend = user.amount.mul(25).div(100);
-        user.amount = 0;
-        user.rewardDebt = 0;
-        pool.lpToken.safeTransfer(address(msg.sender), amountToSend);
-        pool.lpToken.safeTransfer(address(devaddr), devToSend);
-        emit EmergencyWithdraw(msg.sender, _pid, amountToSend);
-    }
+    //     if (_amount > 0) {
+    //         user.amount = user.amount.sub(_amount);
+    //         if (user.lastWithdrawBlock > 0) {
+    //             user.blockdelta = block.number - user.lastWithdrawBlock;
+    //         } else {
+    //             user.blockdelta = block.number - user.firstDepositBlock;
+    //         }
+    //         if (
+    //             user.blockdelta == blockDeltaStartStage[0] ||
+    //             block.number == user.lastDepositBlock
+    //         ) {
+    //             //25% fee for withdrawals of LP tokens in the same block this is to prevent abuse from flashloans
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[0]).div(100)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[0]).div(100)
+    //             );
+    //         } else if (
+    //             user.blockdelta >= blockDeltaStartStage[1] &&
+    //             user.blockdelta <= blockDeltaEndStage[0]
+    //         ) {
+    //             //8% fee if a user deposits and withdraws in between same block and 59 minutes.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[1]).div(100)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[1]).div(100)
+    //             );
+    //         } else if (
+    //             user.blockdelta >= blockDeltaStartStage[2] &&
+    //             user.blockdelta <= blockDeltaEndStage[1]
+    //         ) {
+    //             //4% fee if a user deposits and withdraws after 1 hour but before 1 day.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[2]).div(100)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[2]).div(100)
+    //             );
+    //         } else if (
+    //             user.blockdelta >= blockDeltaStartStage[3] &&
+    //             user.blockdelta <= blockDeltaEndStage[2]
+    //         ) {
+    //             //2% fee if a user deposits and withdraws between after 1 day but before 3 days.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[3]).div(100)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[3]).div(100)
+    //             );
+    //         } else if (
+    //             user.blockdelta >= blockDeltaStartStage[4] &&
+    //             user.blockdelta <= blockDeltaEndStage[3]
+    //         ) {
+    //             //1% fee if a user deposits and withdraws after 3 days but before 5 days.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[4]).div(100)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[4]).div(100)
+    //             );
+    //         } else if (
+    //             user.blockdelta >= blockDeltaStartStage[5] &&
+    //             user.blockdelta <= blockDeltaEndStage[4]
+    //         ) {
+    //             //0.5% fee if a user deposits and withdraws if the user withdraws after 5 days but before 2 weeks.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[5]).div(1000)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[5]).div(1000)
+    //             );
+    //         } else if (
+    //             user.blockdelta >= blockDeltaStartStage[6] &&
+    //             user.blockdelta <= blockDeltaEndStage[5]
+    //         ) {
+    //             //0.25% fee if a user deposits and withdraws after 2 weeks.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[6]).div(10000)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[6]).div(10000)
+    //             );
+    //         } else if (user.blockdelta > blockDeltaStartStage[7]) {
+    //             //0.1% fee if a user deposits and withdraws after 4 weeks.
+    //             pool.lpToken.safeTransfer(
+    //                 address(msg.sender),
+    //                 _amount.mul(userFeeStage[7]).div(10000)
+    //             );
+    //             pool.lpToken.safeTransfer(
+    //                 address(devaddr),
+    //                 _amount.mul(devFeeStage[7]).div(10000)
+    //             );
+    //         }
+    //         user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
+    //         emit Withdraw(msg.sender, _pid, _amount);
+    //         user.lastWithdrawBlock = block.number;
+    //     }
+    // }
 
     // Safe Raisy transfer function, just in case if rounding error causes pool to not have enough Raisys.
     function safeRaisyTransfer(address _to, uint256 _amount) internal {
@@ -633,29 +492,9 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         devaddr = _devaddr;
     }
 
-    // Update Finish Bonus Block
-    function bonusFinishUpdate(uint256 _newFinish) public onlyOwner {
-        FINISH_BONUS_AT_BLOCK = _newFinish;
-    }
-
-    // Update Halving At Block
-    function halvingUpdate(uint256[] memory _newHalving) public onlyOwner {
-        HALVING_AT_BLOCK = _newHalving;
-    }
-
-    // Update Liquidityaddr
-    function lpUpdate(address _newLP) public onlyOwner {
-        liquidityaddr = _newLP;
-    }
-
-    // Update comfundaddr
-    function comUpdate(address _newCom) public onlyOwner {
-        comfundaddr = _newCom;
-    }
-
     // Update founderaddr
-    function founderUpdate(address _newFounder) public onlyOwner {
-        founderaddr = _newFounder;
+    function daoTreasuryUpdate(address _newDaoTreasury) public onlyOwner {
+        daotreasuryaddr = _newDaoTreasury;
     }
 
     // Update Reward Per Block
@@ -663,114 +502,8 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         REWARD_PER_BLOCK = _newReward;
     }
 
-    // Update Rewards Mulitplier Array
-    function rewardMulUpdate(uint256[] memory _newMulReward)
-        public
-        onlyOwner
-    {
-        REWARD_MULTIPLIER = _newMulReward;
-    }
-
-    // Update % lock for general users
-    function lockUpdate(uint256[] memory _newlock) public onlyOwner {
-        PERCENT_LOCK_BONUS_REWARD = _newlock;
-    }
-
-    // Update % lock for dev
-    function lockdevUpdate(uint256 _newdevlock) public onlyOwner {
-        PERCENT_FOR_DEV = _newdevlock;
-    }
-
-    // Update % lock for LP
-    function locklpUpdate(uint256 _newlplock) public onlyOwner {
-        PERCENT_FOR_LP = _newlplock;
-    }
-
-    // Update % lock for COM
-    function lockcomUpdate(uint256 _newcomlock) public onlyOwner {
-        PERCENT_FOR_COM = _newcomlock;
-    }
-
-    // Update % lock for Founders
-    function lockfounderUpdate(uint256 _newfounderlock) public onlyOwner {
-        PERCENT_FOR_FOUNDERS = _newfounderlock;
-    }
-
     // Update START_BLOCK
     function starblockUpdate(uint256 _newstarblock) public onlyOwner {
         START_BLOCK = _newstarblock;
-    }
-
-    function getNewRewardPerBlock(uint256 pid1) public view returns (uint256) {
-        uint256 multiplier = getMultiplier(block.number - 1, block.number);
-        if (pid1 == 0) {
-            return multiplier.mul(REWARD_PER_BLOCK);
-        } else {
-            return
-                multiplier
-                    .mul(REWARD_PER_BLOCK)
-                    .mul(poolInfo[pid1 - 1].allocPoint)
-                    .div(totalAllocPoint);
-        }
-    }
-
-    function userDelta(uint256 _pid) public view returns (uint256) {
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        if (user.lastWithdrawBlock > 0) {
-            uint256 estDelta = block.number - user.lastWithdrawBlock;
-            return estDelta;
-        } else {
-            uint256 estDelta = block.number - user.firstDepositBlock;
-            return estDelta;
-        }
-    }
-
-    function reviseWithdraw(
-        uint256 _pid,
-        address _user,
-        uint256 _block
-    ) public onlyOwner {
-        UserInfo storage user = userInfo[_pid][_user];
-        user.lastWithdrawBlock = _block;
-    }
-
-    function reviseDeposit(
-        uint256 _pid,
-        address _user,
-        uint256 _block
-    ) public onlyOwner {
-        UserInfo storage user = userInfo[_pid][_user];
-        user.firstDepositBlock = _block;
-    }
-
-    function setStageStarts(uint256[] memory _blockStarts)
-        public
-        onlyOwner
-    {
-        blockDeltaStartStage = _blockStarts;
-    }
-
-    function setStageEnds(uint256[] memory _blockEnds) public onlyOwner {
-        blockDeltaEndStage = _blockEnds;
-    }
-
-    function setUserFeeStage(uint256[] memory _userFees) public onlyOwner {
-        userFeeStage = _userFees;
-    }
-
-    function setDevFeeStage(uint256[] memory _devFees) public onlyOwner {
-        devFeeStage = _devFees;
-    }
-
-    function setDevDepFee(uint256 _devDepFees) public onlyOwner {
-        devDepFee = _devDepFees;
-    }
-
-    function setUserDepFee(uint256 _usrDepFees) public onlyOwner {
-        userDepFee = _usrDepFees;
-    }
-
-    function reclaimTokenOwnership(address _newOwner) public onlyOwner {
-        Raisy.transferOwnership(_newOwner);
     }
 }

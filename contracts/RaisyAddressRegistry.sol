@@ -14,6 +14,9 @@ contract RaisyAddressRegistry is Ownable {
     /// @notice RaisyChef contract
     address public raisyChef;
 
+    /// @notice RaisyToken contract
+    address public raisyToken;
+
     /**
      @notice Update token registry contract
      @dev Only admin

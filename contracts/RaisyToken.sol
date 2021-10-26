@@ -51,7 +51,7 @@ contract RaisyToken is ERC20, Ownable {
         if (from == address(0)) {
             // When minting tokens
             require(
-                totalSupply().add(amount) <= _maxsupplycap,
+                totalSupply() + amount <= _maxsupplycap,
                 "ERC20Capped: cap exceeded"
             );
         }

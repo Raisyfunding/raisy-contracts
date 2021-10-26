@@ -4,10 +4,10 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface IRaisyAddressRegistry {
     function raisyChef() external view returns (address);
@@ -198,11 +198,9 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "You're not the creator ."
         );
 
-        if (allCampaigns[_campaignId].hasReleaseSchedule) {
-            
-        } else {
+        if (allCampaigns[_campaignId].hasReleaseSchedule) {} else {
             // Transfer the funds to the campaign's creator
-            IERC20 payToken = IERC20(_payToken);
+            IERC20 payToken = IERC20(addressRegistry.raisyToken());
             payToken.safeTransferFrom(
                 address(this),
                 msg.sender,
