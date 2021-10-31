@@ -19,10 +19,21 @@ interface IRaisyAddressRegistry {
     function raisyNFT() external view returns (address);
 
     function raisyToken() external view returns (address);
+
+    function raisyFundsRelease() external view returns (address);
 }
 
 interface IRaisyChef {
     function add(uint256, uint256) external;
+}
+
+interface IRaisyFundsRelease {
+    function register(
+        uint256,
+        uint256,
+        uint256[] calldata,
+        uint256
+    ) external;
 }
 
 interface IRaisyNFT {
@@ -70,15 +81,9 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 tokenId
     );
 
-    event FundsClaimed(
-        uint256 campaignId,
-        address indexed creator
-    );
+    event FundsClaimed(uint256 campaignId, address indexed creator);
 
-    event AddressRegistryUpdated(
-        address indexed newAddressRegistry
-    );
-
+    event AddressRegistryUpdated(address indexed newAddressRegistry);
 
     /// @notice Structure for a campaign
     struct Campaign {
@@ -108,9 +113,13 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice address -> Campaign ID -> amount donated
     mapping(address => mapping(uint256 => uint256)) public userDonations;
 
+    /// @notice Campaign ID -> funds already claimed
+    mapping(uint256 => uint256) public campaignFundsClaimed;
+
     /// @notice Address registry
     IRaisyAddressRegistry public addressRegistry;
 
+    /// @notice Modifiers
     modifier isNotOver(uint256 _campaignId) {
         require(
             allCampaigns[_campaignId].startBlock +
@@ -239,8 +248,21 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "You're not the creator ."
         );
 
+        require(
+            campaignFundsClaimed[_campaignId] <
+                allCampaigns[_campaignId].amountRaised,
+            "No more funds to claim."
+        );
+
+        require(
+            !allCampaigns[_campaignId].isOver,
+            "Funds Release already triggered."
+        );
+
         if (allCampaigns[_campaignId].hasReleaseSchedule) {
             // Trigger state change on RaisyFundsRelease
+            IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(addressRegistry.raisyFundsRelease());
+            raisyFundsRelease.register(_campaignId, null, null, null);
         } else {
             // Transfer the funds to the campaign's creator
             IERC20 payToken = IERC20(addressRegistry.raisyToken());
@@ -249,6 +271,9 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                 msg.sender,
                 allCampaigns[_campaignId].amountRaised
             );
+
+            campaignFundsClaimed[_campaignId] += allCampaigns[_campaignId]
+                .amountRaised;
         }
 
         // Enable Proof of Donation

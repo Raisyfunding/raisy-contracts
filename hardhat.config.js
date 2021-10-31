@@ -4,6 +4,9 @@ require("@nomiclabs/hardhat-etherscan");
 require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
+require("@nomiclabs/hardhat-solhint");
+require("hardhat-contract-sizer");
+require("@openzeppelin/hardhat-upgrades");
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -22,8 +25,23 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-	solidity: "0.8.4",
+	solidity: {
+		version: "0.8.4",
+		settings: {
+			optimizer: {
+				enabled: true,
+				runs: 200,
+			},
+		},
+	},
 	networks: {
+		coverage: {
+			url: "http://localhost:8555",
+		},
+
+		localhost: {
+			url: `http://127.0.0.1:8545`,
+		},
 		// ropsten: {
 		//   url: process.env.ROPSTEN_URL || "",
 		//   accounts:

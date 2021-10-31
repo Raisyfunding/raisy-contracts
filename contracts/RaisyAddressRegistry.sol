@@ -17,6 +17,12 @@ contract RaisyAddressRegistry is Ownable {
     /// @notice RaisyToken contract
     address public raisyToken;
 
+    /// @notice RaisyCampaigns contract
+    address public raisyCampaigns;
+
+    /// @notice RaisyFundsRelease contract
+    address public raisyFundsRelease;
+
     /**
      @notice Update token registry contract
      @dev Only admin
@@ -47,5 +53,24 @@ contract RaisyAddressRegistry is Ownable {
      */
     function updateRaisyToken(address _raisyToken) external onlyOwner {
         raisyToken = _raisyToken;
+    }
+
+    /**
+     @notice Update raisy campaigns contract
+     @dev Only admin
+     */
+    function updateRaisyCampaigns(address _raisyCampaigns) external onlyOwner {
+        raisyCampaigns = _raisyCampaigns;
+    }
+
+    /**
+     @notice Update raisy funds release contract
+     @dev Only admin
+     */
+    function updateRaisyFundsRelease(address _raisyFundsRelease)
+        external
+        onlyOwner
+    {
+        raisyFundsRelease = _raisyFundsRelease;
     }
 }

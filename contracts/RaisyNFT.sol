@@ -3,13 +3,19 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title RaisyNFT
  * RaisyNFT - ERC721 contract that whitelists a trading address, and has minting functionality.
  */
-contract RaisyNFT is ERC721, Ownable {
+contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
+    using Counters for Counters.Counter;
+
+    Counters.Counter private _tokenIdCounter;
+
     mapping(uint256 => DonationInfo) private _donationInfo;
 
     struct DonationInfo {
@@ -37,9 +43,11 @@ contract RaisyNFT is ERC721, Ownable {
         onlyOwner
         returns (uint256)
     {
-        uint256 newTokenId = _getNextTokenId();
+        uint256 newTokenId = _tokenIdCounter.current();
         _safeMint(params.recipient, newTokenId);
+
         _donationInfo[newTokenId] = params;
+
         emit Minted(newTokenId, params);
 
         return newTokenId;
@@ -52,18 +60,29 @@ contract RaisyNFT is ERC721, Ownable {
     */
     function burn(uint256 _tokenId) external {
         address operator = _msgSender();
-        require(ownerOf(_tokenId) == operator);
+        require(ownerOf(_tokenId) == operator, "Not owner or approved sender.");
 
         // Destroy token mappings
         _burn(_tokenId);
         delete _donationInfo[_tokenId];
     }
 
-    /**
-     * @dev calculates the next token ID based on value of _currentTokenId
-     * @return uint256 for the next token ID
-     */
-    function _getNextTokenId() internal returns (uint256) {
-        return _currentTokenId++;
+    // The following functions are overrides required by Solidity.
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override(ERC721, ERC721Enumerable) {
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
