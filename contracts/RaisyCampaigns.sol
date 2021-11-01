@@ -2,50 +2,13 @@
 
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-interface IRaisyAddressRegistry {
-    function raisyChef() external view returns (address);
-
-    function tokenRegistry() external view returns (address);
-
-    function priceFeed() external view returns (address);
-
-    function raisyNFT() external view returns (address);
-
-    function raisyToken() external view returns (address);
-
-    function raisyFundsRelease() external view returns (address);
-}
+import "./RaisyFundsRelease.sol";
 
 interface IRaisyChef {
     function add(uint256, uint256) external;
-}
-
-interface IRaisyFundsRelease {
-    function register(
-        uint256,
-        uint256,
-        uint256[] calldata,
-        uint256
-    ) external;
-}
-
-interface IRaisyNFT {
-    struct DonationInfo {
-        uint256 amount;
-        address tokenUsed;
-        uint256 campaignId;
-        address recipient;
-        uint256 creationTimestamp;
-    }
-
-    function mint(DonationInfo calldata) external returns (uint256);
 }
 
 /// @title Main Smart Contract of the architecture
@@ -53,8 +16,8 @@ interface IRaisyNFT {
 /// @notice Main Contract handling the campaigns' creation and donations
 /// @dev Inherits of upgradeable versions of OZ libraries
 /// interacts with the AddressRegistry / RaisyNFTFactory / RaisyFundsRelease
-contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
-    using Counters for Counters.Counter;
+contract RaisyCampaigns is RaisyFundsRelease {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
     using AddressUpgradeable for address payable;
     using SafeERC20 for IERC20;
 
@@ -83,8 +46,6 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     event FundsClaimed(uint256 campaignId, address indexed creator);
 
-    event AddressRegistryUpdated(address indexed newAddressRegistry);
-
     /// @notice Structure for a campaign
     struct Campaign {
         uint256 id; // ID of the campaign automatically set by the counter
@@ -102,7 +63,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public minDuration;
 
     /// @notice Latest campaign ID
-    Counters.Counter private _campaignIdCounter;
+    CountersUpgradeable.Counter private _campaignIdCounter;
 
     /// @notice Campaign ID -> Campaign
     mapping(uint256 => Campaign) public allCampaigns;
@@ -115,9 +76,6 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// @notice Campaign ID -> funds already claimed
     mapping(uint256 => uint256) public campaignFundsClaimed;
-
-    /// @notice Address registry
-    IRaisyAddressRegistry public addressRegistry;
 
     /// @notice Modifiers
     modifier isNotOver(uint256 _campaignId) {
@@ -145,11 +103,25 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _;
     }
 
-    function addCampaign(
-        uint256 _duration,
-        uint256 _amountToRaise,
-        bool _hasReleaseSchedule
-    ) external {
+    modifier isSuccess(uint256 _campaignId) {
+        require(
+            allCampaigns[_campaignId].amountRaised >=
+                allCampaigns[_campaignId].amountToRaise,
+            "Campaign hasn't been successful."
+        );
+        _;
+    }
+
+    modifier onlyCreator(uint256 _campaignId) {
+        require(
+            allCampaigns[_campaignId].creator == msg.sender,
+            "You're not the creator ."
+        );
+        _;
+    }
+
+    /// @notice Add a campaign without any release schedule
+    function addCampaign(uint256 _duration, uint256 _amountToRaise) external {
         require(_duration <= maxDuration, "duration too long");
         require(_duration >= minDuration, "duration too short");
         require(_amountToRaise > 0, "amount to raise null");
@@ -165,7 +137,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             block.number,
             _amountToRaise,
             0,
-            _hasReleaseSchedule
+            false
         );
 
         // Add new pool to the RaisyChef
@@ -185,7 +157,56 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             _duration,
             block.number,
             _amountToRaise,
-            _hasReleaseSchedule
+            false
+        );
+    }
+
+    /// @notice Add campaign with a release schedule
+    function addCampaign(
+        uint256 _duration,
+        uint256 _amountToRaise,
+        uint256 _nbMilestones,
+        uint256[] calldata _pctReleasePerMilestone
+    ) external {
+        require(_duration <= maxDuration, "duration too long");
+        require(_duration >= minDuration, "duration too short");
+        require(_amountToRaise > 0, "amount to raise null");
+
+        uint256 campaignId = _campaignIdCounter.current();
+
+        // Add a new campaign to the mapping
+        allCampaigns[campaignId] = Campaign(
+            campaignId,
+            msg.sender,
+            false,
+            _duration,
+            block.number,
+            _amountToRaise,
+            0,
+            true
+        );
+
+        // Add new pool to the RaisyChef
+        IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
+        raisyChef.add(campaignId, block.number + _duration);
+
+        // Register the schedule
+        register(campaignId, _nbMilestones, _pctReleasePerMilestone);
+
+        // Inrease the counter
+        _campaignIdCounter.increment();
+
+        // Note that it now exists
+        campaignExistence[campaignId] = true;
+
+        // Emit creation event
+        emit CampaignCreated(
+            campaignId,
+            msg.sender,
+            _duration,
+            block.number,
+            _amountToRaise,
+            true
         );
     }
 
@@ -237,17 +258,14 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit ProofOfDonationClaimed(_campaignId, msg.sender, tokenId);
     }
 
-    function claimFunds(uint256 _campaignId)
+    function claimInitialFunds(uint256 _campaignId)
         external
         exists(_campaignId)
         isOver(_campaignId)
+        isSuccess(_campaignId)
+        onlyCreator(_campaignId)
         nonReentrant
     {
-        require(
-            allCampaigns[_campaignId].creator == msg.sender,
-            "You're not the creator ."
-        );
-
         require(
             campaignFundsClaimed[_campaignId] <
                 allCampaigns[_campaignId].amountRaised,
@@ -256,16 +274,28 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         require(
             !allCampaigns[_campaignId].isOver,
-            "Funds Release already triggered."
+            "Initial Funds Release already triggered."
         );
+
+        IERC20 payToken = IERC20(addressRegistry.raisyToken());
 
         if (allCampaigns[_campaignId].hasReleaseSchedule) {
             // Trigger state change on RaisyFundsRelease
-            IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(addressRegistry.raisyFundsRelease());
-            raisyFundsRelease.register(_campaignId, null, null, null);
+            uint256 toReleasePct = getNextPctFunds(_campaignId);
+            uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
+                toReleasePct) / 100;
+
+            // Transfer the funds to the campaign's creator
+            payToken.safeTransferFrom(
+                address(this),
+                msg.sender,
+                toReleaseAmount
+            );
+
+            campaignFundsClaimed[_campaignId] += toReleaseAmount;
         } else {
             // Transfer the funds to the campaign's creator
-            IERC20 payToken = IERC20(addressRegistry.raisyToken());
+
             payToken.safeTransferFrom(
                 address(this),
                 msg.sender,
@@ -283,13 +313,56 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit FundsClaimed(_campaignId, msg.sender);
     }
 
-    /**
-     @notice Update AgoraAddressRegistry contract
-     @dev Only admin
-     */
-    function updateAddressRegistry(address _registry) external onlyOwner {
-        addressRegistry = IRaisyAddressRegistry(_registry);
+    /// @notice If donors voted YES to transfer the next portion of funds
+    /// then the creator can come up and call this function to claim the funds
+    function claimNextFunds(uint256 _campaignId)
+        external
+        exists(_campaignId)
+        isOver(_campaignId)
+        isSuccess(_campaignId)
+        onlyCreator(_campaignId)
+        nonReentrant
+    {
+        require(
+            campaignFundsClaimed[_campaignId] <
+                allCampaigns[_campaignId].amountRaised,
+            "No more funds to claim."
+        );
+        require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
 
-        emit AddressRegistryUpdated(_registry);
+        IERC20 payToken = IERC20(addressRegistry.raisyToken());
+
+        // Trigger state change on RaisyFundsRelease
+        uint256 toReleasePct = getNextPctFunds(_campaignId);
+        uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
+            toReleasePct) / 100;
+
+        // Transfer the funds to the campaign's creator
+        payToken.safeTransferFrom(address(this), msg.sender, toReleaseAmount);
+
+        campaignFundsClaimed[_campaignId] += toReleaseAmount;
+
+        // Emit the claim event
+        emit FundsClaimed(_campaignId, msg.sender);
+    }
+
+    /// @notice The creator can come up at anytime during his campaign to ask for more funds
+    /// This initializes a vote session in the RaisyFundsRelease contract
+    function askMoreFunds(uint256 _campaignId)
+        external
+        exists(_campaignId)
+        isOver(_campaignId)
+        isSuccess(_campaignId)
+        onlyCreator(_campaignId)
+        nonReentrant
+    {
+        require(
+            campaignFundsClaimed[_campaignId] <
+                allCampaigns[_campaignId].amountRaised,
+            "No more funds to claim."
+        );
+        require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
+
+        initializeVoteSession(_campaignId);
     }
 }

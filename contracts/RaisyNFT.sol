@@ -16,7 +16,10 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
 
     Counters.Counter private _tokenIdCounter;
 
+    /// @notice tokenId -> Donation Info
     mapping(uint256 => DonationInfo) private _donationInfo;
+
+    /// @notice campaign ID -> Donation Info
 
     struct DonationInfo {
         uint256 amount;
@@ -51,6 +54,14 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
         emit Minted(newTokenId, params);
 
         return newTokenId;
+    }
+
+    function getDonationInfo(uint256 _tokenId)
+        external
+        view
+        returns (DonationInfo memory)
+    {
+        return _donationInfo[_tokenId];
     }
 
     /**
