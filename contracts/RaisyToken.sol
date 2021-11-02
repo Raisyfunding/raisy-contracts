@@ -4,11 +4,11 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
 
 /// @author Raisyfunding
 /// @title RaisyToken
-contract RaisyToken is ERC20, Ownable {
-
+contract RaisyToken is ERC20, Ownable, ERC20Permit {
     /// Variable declarations
 
     uint256 private _maxsupplycap;
@@ -21,7 +21,7 @@ contract RaisyToken is ERC20, Ownable {
         string memory _name,
         string memory _symbol,
         uint256 maxsupplycap_
-    ) ERC20(_name, _symbol) {
+    ) ERC20(_name, _symbol) ERC20Permit(_name) {
         _maxsupplycap = maxsupplycap_;
     }
 
