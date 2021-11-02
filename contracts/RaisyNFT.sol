@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title RaisyNFT
+ * @author Raisyfunding
  * RaisyNFT - ERC721 contract that whitelists a trading address, and has minting functionality.
  */
 contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {

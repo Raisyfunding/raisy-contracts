@@ -44,6 +44,11 @@ interface IRaisyNFT {
     function mint(DonationInfo calldata) external returns (uint256);
 }
 
+/// @title RaisyFundsRelease
+/// @author RaisyFunding
+/// @notice Smart contract responsible for managing the campaigns' schedule as well as the voting system
+/// @dev Parent of RaisyCampaigns, Will be an implementation of a proxy and therefore upgradeable
+/// Owner is the ProxyAdmin hence the governance (gnosis-snap-safe)
 contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Events of the contract
     event ScheduleRegistered(

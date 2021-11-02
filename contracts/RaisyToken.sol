@@ -6,8 +6,11 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
 
-/// @author Raisyfunding
 /// @title RaisyToken
+/// @author RaisyFunding
+/// @notice Token used in the Raisy protocol for both governance and donations (staking)
+/// @dev Owner is the RaisyChef contract, implements the ERC20Permit standard (OZ) for easy approvals
+/// Max supply cap is also ensured thanks to the ERC20Capped standard (OZ)
 contract RaisyToken is ERC20, Ownable, ERC20Permit {
     /// Variable declarations
     uint256 private _maxsupplycap;

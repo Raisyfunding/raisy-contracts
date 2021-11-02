@@ -10,10 +10,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./RaisyToken.sol";
 
-// RaisyChef is the master of the raisy campaigns.
-//
-// Note that it's ownable and the owner is the RaisyCampaigns contract
-//
+/// @title RaisyChef 
+/// @author RaisyFunding
+/// @notice Manages the staking process of $RSY into each pool which refers to a campaign
+/// @dev Inspired by the masterchef used in yield farming
 contract RaisyChef is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
