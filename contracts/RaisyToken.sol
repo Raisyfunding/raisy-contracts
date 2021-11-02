@@ -10,7 +10,6 @@ import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
 /// @title RaisyToken
 contract RaisyToken is ERC20, Ownable, ERC20Permit {
     /// Variable declarations
-
     uint256 private _maxsupplycap;
 
     /// @notice Constructor of RaisyToken.
@@ -22,6 +21,7 @@ contract RaisyToken is ERC20, Ownable, ERC20Permit {
         string memory _symbol,
         uint256 maxsupplycap_
     ) ERC20(_name, _symbol) ERC20Permit(_name) {
+        require(maxsupplycap_ > 0, "ERC20Capped: cap is 0");
         _maxsupplycap = maxsupplycap_;
     }
 
