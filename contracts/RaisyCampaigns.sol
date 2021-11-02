@@ -46,6 +46,14 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     event FundsClaimed(uint256 campaignId, address indexed creator);
 
+    event Refund(
+        uint256 campaignId,
+        address indexed user,
+        uint256 refundAmount
+    );
+
+    event MoreFundsAsked(uint256 campaignId, address indexed creator);
+
     /// @notice Structure for a campaign
     struct Campaign {
         uint256 id; // ID of the campaign automatically set by the counter
@@ -224,6 +232,9 @@ contract RaisyCampaigns is RaisyFundsRelease {
         // Update the mappings
         allCampaigns[_campaignId].amountRaised += _amount;
 
+        if (userDonations[msg.sender][_campaignId] == 0)
+            nbDonors[_campaignId]++;
+
         userDonations[msg.sender][_campaignId] += _amount;
 
         // Emit donation event
@@ -237,6 +248,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
     {
         require(allCampaigns[_campaignId].isOver, "Campaign is not over.");
         require(userDonations[msg.sender][_campaignId] > 0, "No PoD to claim.");
+        require(!podClaimed[_campaignId][msg.sender], "PoD already claimed.");
 
         // Mint Raisy NFT
         IRaisyNFT raisyNFT = IRaisyNFT(addressRegistry.raisyNFT());
@@ -251,8 +263,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         uint256 tokenId = raisyNFT.mint(donationInfo);
 
-        // Reset his donation amount
-        userDonations[msg.sender][_campaignId] = 0;
+        podClaimed[_campaignId][msg.sender] = true;
 
         // Emit the claim event
         emit ProofOfDonationClaimed(_campaignId, msg.sender, tokenId);
@@ -283,7 +294,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             // Trigger state change on RaisyFundsRelease
             uint256 toReleasePct = getNextPctFunds(_campaignId);
             uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
-                toReleasePct) / 100;
+                toReleasePct) / 10000;
 
             // Transfer the funds to the campaign's creator
             payToken.safeTransferFrom(
@@ -329,13 +340,14 @@ contract RaisyCampaigns is RaisyFundsRelease {
             "No more funds to claim."
         );
         require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
+        require(endVoteSession(_campaignId), "Vote didn't pass.");
 
         IERC20 payToken = IERC20(addressRegistry.raisyToken());
 
         // Trigger state change on RaisyFundsRelease
         uint256 toReleasePct = getNextPctFunds(_campaignId);
         uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
-            toReleasePct) / 100;
+            toReleasePct) / 10000;
 
         // Transfer the funds to the campaign's creator
         payToken.safeTransferFrom(address(this), msg.sender, toReleaseAmount);
@@ -364,5 +376,36 @@ contract RaisyCampaigns is RaisyFundsRelease {
         require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
 
         initializeVoteSession(_campaignId);
+
+        emit MoreFundsAsked(_campaignId, msg.sender);
+    }
+
+    function getFundsBack(uint256 _campaignId)
+        external
+        exists(_campaignId)
+        isOver(_campaignId)
+        isSuccess(_campaignId)
+        atStage(_campaignId, Stages.Refund)
+        hasProofOfDonation(_campaignId)
+        nonReentrant
+    {
+        require(
+            userDonations[msg.sender][_campaignId] > 0,
+            "No more funds to withdraw."
+        );
+
+        IERC20 payToken = IERC20(addressRegistry.raisyToken());
+
+        uint256 refundAmount = (userDonations[msg.sender][_campaignId] *
+            (10000 - campaignSchedule[_campaignId].pctReleased)) / 10000;
+
+        if (refundAmount > 0) {
+            // Transfer the funds back to the user
+            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
+
+            userDonations[msg.sender][_campaignId] = 0;
+        }
+
+        emit Refund(_campaignId, msg.sender, refundAmount);
     }
 }
