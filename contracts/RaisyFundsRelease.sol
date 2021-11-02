@@ -58,7 +58,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     event VoteSessionInitialized(uint256 campaignId);
 
-    event NewVote(uint256 campaignId, address indexed voter, uint256 voteRatio);
+    event NewVote(uint256 campaignId, address indexed voter, int256 voteRatio);
 
     /// @notice Stages Enum
     enum Stages {
@@ -76,10 +76,12 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         Stages releaseStage;
     }
 
+    /// @notice Vote Structure
     struct VoteSession {
         uint256 startBlock;
-        uint256 voteRatio;
+        int256 voteRatio;
         bool inProgress;
+        uint8 numUnsuccessfulVotes;
         mapping(address => bool) hasVoted;
     }
 
@@ -117,7 +119,10 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /// @notice This function allows to register a schedule for a given campaignId
-    /// @dev Only callable by RaisyCampaigns
+    /// @dev Internal function called in RaisyCampaigns.sol when the capaign is created
+    /// @param _campaignId Id of the campaign
+    /// @param _nbMilestones The number of milestones the project owner wants to add
+    /// @param _pctReleasePerMilestone The percentage of funds released at each milestone
     function register(
         uint256 _campaignId,
         uint256 _nbMilestones,
@@ -167,6 +172,11 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
+    /**
+     * @notice Gives the next percentage of total funds to be released
+     * @dev Internal function called in RaisyCampaigns.sol to release funds
+     * @param _campaignId Id of the campaign
+     */
     function getNextPctFunds(uint256 _campaignId)
         internal
         atStage(_campaignId, Stages.Release)
@@ -192,6 +202,8 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /// @notice Starts a vote session to release the next porition of funds
+    /// @dev Internal function called by the campaign's owner in RaisyCapaigns.sol to ask for more funds
+    /// @param _campaignId Id of the campaign
     function initializeVoteSession(uint256 _campaignId)
         internal
         atStage(_campaignId, Stages.Release)
@@ -212,6 +224,11 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit VoteSessionInitialized(_campaignId);
     }
 
+    /**
+     * @notice Funders can vote whether they give more funds or not
+     * @param _campaignId Id of the campaign
+     * @param _vote Vote yes or no
+     */
     function vote(uint256 _campaignId, bool _vote) external nonReentrant {
         require(
             voteSession[_campaignId].inProgress,
@@ -233,7 +250,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         for (uint256 index = 0; index < userBalance; index++) {
             uint256 tokenId = raisyNFT.tokenOfOwnerByIndex(msg.sender, index);
-            
+
             // Gets the donation info for the tokenId
             IRaisyNFT.DonationInfo memory donationInfo = raisyNFT
                 .getDonationInfo(tokenId);
@@ -242,7 +259,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                 hasProofOfDonation = true;
         }
 
-        require(hasProofOfDonation, "No Proof Of Donation for this campaign.");
+        require(hasProofOfDonation, "No POD for this campaign.");
 
         if (_vote) voteSession[_campaignId].voteRatio++;
         else voteSession[_campaignId].voteRatio--;
@@ -257,8 +274,42 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /**
-     @notice Update AgoraAddressRegistry contract
-     @dev Only admin
+     * @notice Ends the vote session, pays the campaign owner or increase the number of unsuccessful votes.
+     * @param _campaignId Id of the campaign
+     */
+    function endVoteSession(uint256 _campaignId) internal {
+        require(
+            voteSession[_campaignId].inProgress,
+            "Vote session not in progress."
+        );
+        require(
+            block.number > voteSession[_campaignId].startBlock,
+            "Vote session not ended"
+        );
+
+        voteSession[_campaignId].inProgress = false;
+        if (voteSession[_campaignId].voteRatio >= 0) {
+            ///TODO: pay the next milestone
+            voteSession[_campaignId].numUnsuccessfulVotes = 0;
+        } else {
+            voteSession[_campaignId].numUnsuccessfulVotes++;
+            if (voteSession[_campaignId].numUnsuccessfulVotes == 3) {
+                ///TODO: reimburse investors + end fundRelease
+            }
+        }
+    }
+
+    /**
+     * @notice Refund funders if more than 50% want it
+     * @param _campaignId Id of the campaign
+     */
+    function refundAll(uint256 _campaignId) external {
+        ///TODO: Votes + refund
+    }
+
+    /**
+     * @notice Update AgoraAddressRegistry contract
+     * @dev Only admin
      */
     function updateAddressRegistry(address _registry) external onlyOwner {
         addressRegistry = IRaisyAddressRegistry(_registry);
@@ -267,8 +318,8 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     /**
-     @notice Update VOTE_SESSION_DURATION (in blocks)
-     @dev Only admin
+     * @notice Update VOTE_SESSION_DURATION (in blocks)
+     * @dev Only admin
      */
     function updateVoteSessionDuration(uint256 _duration) external onlyOwner {
         VOTE_SESSION_DURATION = _duration;
