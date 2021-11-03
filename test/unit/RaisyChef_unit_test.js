@@ -53,5 +53,27 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
     it("Reverts when pool already exists", async () => {
       expectRevert(this.chef.add("1", END_BLOCK), "Id already exists");
     });
+    it("Successfully adds a pool", async () => {
+      await this.chef.add("2", END_BLOCK);
+      expect(await this.chef.poolLength()).to.be.bignumber.equal("2");
+    });
+  });
+  describe("Test setPool", () => {
+    it("reverts when not owner", async () => {
+      expectRevert(
+        this.chef.set("1", END_BLOCK, DAO_BONUS, {
+          from: projectowner,
+        }),
+        "Ownable: caller is not the owner"
+      );
+      it("Successfully change the pool", async () => {
+        expect(
+          await this.chef.set("1", BLOCK, DAO_BONUS, {
+            from: owner,
+          })
+        );
+      });
+      //Check enblock>block.number with mock contract
+    });
   });
 });

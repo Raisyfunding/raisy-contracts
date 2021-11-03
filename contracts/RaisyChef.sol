@@ -155,6 +155,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 _endBlock,
         uint256 _daoBonusMultiplier
     ) external onlyOwner {
+        require(_endBlock > block.number, "End block in the past");
         poolInfo[_pid].endBlock = _endBlock;
         poolInfo[_pid].daoBonusMultiplier = _daoBonusMultiplier;
     }
