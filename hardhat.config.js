@@ -1,14 +1,14 @@
 require("dotenv").config();
 
+require("@openzeppelin/hardhat-upgrades");
 require("@nomiclabs/hardhat-etherscan");
 require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-solhint");
+require("@nomiclabs/hardhat-truffle5");
+require("@nomiclabs/hardhat-web3");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
-require("@nomiclabs/hardhat-solhint");
 require("hardhat-contract-sizer");
-require("@openzeppelin/hardhat-upgrades");
-require("@nomiclabs/hardhat-web3-legacy");
-require("@nomiclabs/hardhat-truffle4");
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html

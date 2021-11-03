@@ -25,8 +25,6 @@
 		"hardhat": "^2.4.1"
 	},
 	"dependencies": {
-		"@nomiclabs/hardhat-truffle4": "^2.0.2",
-		"@nomiclabs/hardhat-web3-legacy": "^2.0.0",
 		"@openzeppelin/test-helpers": "^0.5.15",
 		"chai-bn": "^0.3.0",
 		"dotenv": "^10.0.0",
