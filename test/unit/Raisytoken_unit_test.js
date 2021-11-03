@@ -35,5 +35,22 @@ contract('Unit tests for the Raisytoken contract', function ([
                 "Ownable: caller is not the owner"
             );
         });
+        it('successfully mint token', async function() {
+            await this.token.mint(
+                    owner,
+                    "1000",
+                    { from: owner }
+                );          
+        });
+        it('reverts when exceed cap', async function() {
+            await expectRevert(
+                this.token.mint(
+                    owner,
+                    "10000000000000000000000001",
+                    { from: owner }
+                ),
+                "ERC20Capped: cap exceeded"
+            );
+        });
     });
 })
