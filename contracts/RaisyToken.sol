@@ -66,10 +66,4 @@ contract RaisyToken is ERC20, Ownable, ERC20Permit {
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
     }
-
-    /// @dev View returns the total balance of an address.
-    /// @param _holder Address of the account
-    function totalBalanceOf(address _holder) public view returns (uint256) {
-        return balanceOf(_holder);
-    }
 }

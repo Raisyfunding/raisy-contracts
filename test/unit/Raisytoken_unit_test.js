@@ -15,6 +15,17 @@ contract("RaisyToken", ([ owner, projectowner, feeRecipient]) => {
 	const MAX_SUPPLY = new BN(ether("10000000"));
 	const OVER_MAX_SUPPLY = new BN(ether("10000001"));
 	const ONE_THOUSAND = new BN(ether("1000"));
+	const WRONG_MAXCAP = new BN("0")
+
+	describe("Constructor", () =>  {
+		it("reverts when wrong maxcap", async () =>  {
+			await expectRevert(
+			RaisyToken.new("RaisyToken", "RSY", WRONG_MAXCAP, {from: owner}),
+			"ERC20Capped: cap is 0"
+			);
+		});
+	});
+
 
 	beforeEach(async () =>  {
 		this.raisyToken = await RaisyToken.new("RaisyToken", "RSY", MAX_SUPPLY, {
@@ -42,5 +53,10 @@ contract("RaisyToken", ([ owner, projectowner, feeRecipient]) => {
 				"ERC20Capped: cap exceeded"
 			);
 		});
+		describe("View functions", () =>  {
+		it("Returns maxcap", async () =>  {
+			expect(await this.raisyToken.maxsupplycap({ from: owner })).to.be.bignumber.equal(MAX_SUPPLY);
+		});
+	});
 	});
 });
