@@ -18,11 +18,12 @@ contract('Unit tests for the Raisytoken contract', function ([
     feeRecipient,
 ]) {
     const minttoken = ether("1000");
+    const maxsupply = new BN("10000000000000000000000000");
 
 
     beforeEach(async function () {
         this.value = new BN(1);
-        this.token = await RaisyToken.new("RaisyToken","RSY","10000000000000000000000000",{ from: owner });
+        this.token = await RaisyToken.new("RaisyToken","RSY",maxsupply,{ from: owner });
       });
 
     describe('Mint tokens', function () {
@@ -52,6 +53,15 @@ contract('Unit tests for the Raisytoken contract', function ([
                 ),
                 "ERC20Capped: cap exceeded"
             );
+        });
+        it ("returns maxcap", async function() {
+            await this.token.maxsupplycap();
+        });
+        it ("returns circulating supply", async function() {
+            await this.token.circulatingSupply();
+        });
+        it ("returns total balance of", async function() {
+            await this.token.totalBalanceOf(owner);
         });
     });
 })
