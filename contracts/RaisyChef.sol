@@ -160,14 +160,6 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         poolInfo[_pid].daoBonusMultiplier = _daoBonusMultiplier;
     }
 
-    // Update reward variables for all pools. Be careful of gas spending!
-    function massUpdatePools() public {
-        uint256 length = poolInfo.length;
-        for (uint256 pid = 0; pid < length; ++pid) {
-            updatePool(pid);
-        }
-    }
-
     // Update reward variables of the given pool to be up-to-date.
     function updatePool(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
