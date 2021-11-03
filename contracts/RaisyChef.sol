@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./RaisyToken.sol";
 
-/// @title RaisyChef 
+/// @title RaisyChef
 /// @author RaisyFunding
 /// @notice Manages the staking process of $RSY into each pool which refers to a campaign
 /// @dev Inspired by the masterchef used in yield farming
@@ -344,133 +344,6 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
         emit Deposit(msg.sender, _pid, _amount);
     }
-
-    // // Withdraw LP tokens from MasterGardener.
-    // function withdraw(uint256 _pid, uint256 _amount) public nonReentrant {
-    //     PoolInfo storage pool = poolInfo[_pid];
-    //     UserInfo storage user = userInfo[_pid][msg.sender];
-    //     UserGlobalInfo storage current = userGlobalInfo[msg.sender];
-    //     require(user.amount >= _amount, "RaisyChef::withdraw: not good");
-
-    //     current.globalAmount = current.globalAmount - _amount;
-
-    //     updatePool(_pid);
-    //     _harvest(_pid);
-
-    //     if (_amount > 0) {
-    //         user.amount = user.amount.sub(_amount);
-    //         if (user.lastWithdrawBlock > 0) {
-    //             user.blockdelta = block.number - user.lastWithdrawBlock;
-    //         } else {
-    //             user.blockdelta = block.number - user.firstDepositBlock;
-    //         }
-    //         if (
-    //             user.blockdelta == blockDeltaStartStage[0] ||
-    //             block.number == user.lastDepositBlock
-    //         ) {
-    //             //25% fee for withdrawals of LP tokens in the same block this is to prevent abuse from flashloans
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[0]).div(100)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[0]).div(100)
-    //             );
-    //         } else if (
-    //             user.blockdelta >= blockDeltaStartStage[1] &&
-    //             user.blockdelta <= blockDeltaEndStage[0]
-    //         ) {
-    //             //8% fee if a user deposits and withdraws in between same block and 59 minutes.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[1]).div(100)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[1]).div(100)
-    //             );
-    //         } else if (
-    //             user.blockdelta >= blockDeltaStartStage[2] &&
-    //             user.blockdelta <= blockDeltaEndStage[1]
-    //         ) {
-    //             //4% fee if a user deposits and withdraws after 1 hour but before 1 day.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[2]).div(100)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[2]).div(100)
-    //             );
-    //         } else if (
-    //             user.blockdelta >= blockDeltaStartStage[3] &&
-    //             user.blockdelta <= blockDeltaEndStage[2]
-    //         ) {
-    //             //2% fee if a user deposits and withdraws between after 1 day but before 3 days.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[3]).div(100)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[3]).div(100)
-    //             );
-    //         } else if (
-    //             user.blockdelta >= blockDeltaStartStage[4] &&
-    //             user.blockdelta <= blockDeltaEndStage[3]
-    //         ) {
-    //             //1% fee if a user deposits and withdraws after 3 days but before 5 days.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[4]).div(100)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[4]).div(100)
-    //             );
-    //         } else if (
-    //             user.blockdelta >= blockDeltaStartStage[5] &&
-    //             user.blockdelta <= blockDeltaEndStage[4]
-    //         ) {
-    //             //0.5% fee if a user deposits and withdraws if the user withdraws after 5 days but before 2 weeks.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[5]).div(1000)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[5]).div(1000)
-    //             );
-    //         } else if (
-    //             user.blockdelta >= blockDeltaStartStage[6] &&
-    //             user.blockdelta <= blockDeltaEndStage[5]
-    //         ) {
-    //             //0.25% fee if a user deposits and withdraws after 2 weeks.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[6]).div(10000)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[6]).div(10000)
-    //             );
-    //         } else if (user.blockdelta > blockDeltaStartStage[7]) {
-    //             //0.1% fee if a user deposits and withdraws after 4 weeks.
-    //             pool.lpToken.safeTransfer(
-    //                 address(msg.sender),
-    //                 _amount.mul(userFeeStage[7]).div(10000)
-    //             );
-    //             pool.lpToken.safeTransfer(
-    //                 address(devaddr),
-    //                 _amount.mul(devFeeStage[7]).div(10000)
-    //             );
-    //         }
-    //         user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
-    //         emit Withdraw(msg.sender, _pid, _amount);
-    //         user.lastWithdrawBlock = block.number;
-    //     }
-    // }
 
     // Safe Raisy transfer function, just in case if rounding error causes pool to not have enough Raisys.
     function safeRaisyTransfer(address _to, uint256 _amount) internal {
