@@ -4,6 +4,7 @@ const {
     expectEvent,
     expectRevert,
     balance,
+    ether,
 } = require('@openzeppelin/test-helpers');
 const { ZERO_ADDRESS } = constants;
 
@@ -16,7 +17,7 @@ contract('Unit tests for the Raisytoken contract', function ([
     projectowner,
     feeRecipient,
 ]) {
-    const minttoken = new BN('10000000000000000000000');
+    const minttoken = ether("1000");
 
 
     beforeEach(async function () {
