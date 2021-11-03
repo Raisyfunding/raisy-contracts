@@ -67,8 +67,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
     }
 
     /// @notice Maximum and Minimum campaigns' duration
-    uint256 public maxDuration;
-    uint256 public minDuration;
+    uint256 public maxDuration = 20;
+    uint256 public minDuration = 200;
 
     /// @notice Latest campaign ID
     CountersUpgradeable.Counter private _campaignIdCounter;

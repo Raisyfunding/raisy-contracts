@@ -1,13 +1,13 @@
 {
 	"name": "raisy-contracts",
 	"version": "1.0.0",
-	"description": "",
+	"description": "Smart Contracts for Raisy, first decentralized crowdfunding platform.",
 	"main": "index.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [],
-	"author": "",
+	"author": "RaisyFunding",
 	"license": "ISC",
 	"devDependencies": {
 		"@nomiclabs/hardhat-ethers": "^2.0.2",
@@ -25,14 +25,11 @@
 		"hardhat": "^2.4.1"
 	},
 	"dependencies": {
-		"@nomiclabs/hardhat-truffle4": "^2.0.2",
-		"@nomiclabs/hardhat-web3-legacy": "^2.0.0",
+		"@openzeppelin/contracts-ethereum-package": "^3.0.0",
 		"@openzeppelin/test-helpers": "^0.5.15",
-		"chai-bn": "^0.3.0",
 		"dotenv": "^10.0.0",
 		"hardhat-contract-sizer": "^2.0.3",
 		"hardhat-gas-reporter": "^1.0.4",
-		"solidity-coverage": "^0.7.16",
-		"web3": "0.20.7"
+		"solidity-coverage": "^0.7.16"
 	}
 }
