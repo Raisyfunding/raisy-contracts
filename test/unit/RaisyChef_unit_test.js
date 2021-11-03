@@ -17,8 +17,10 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
   const REW_PER_BLOCK = new BN("10");
   const LOCK = new BN("100");
   const START_BLOCK = new BN("1");
+  const BLOCK = new BN("1000");
   const END_BLOCK = new BN("15000");
   const ONE_THOUSAND = new BN(ether("1000"));
+  const DAO_BONUS = new BN("2");
 
   beforeEach(async () => {
     this.raisyToken = await RaisyToken.new("RaisyToken", "RSY", MAX_SUPPLY, {
@@ -42,6 +44,14 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
   describe("Test views", () => {
     it("Returns poollength", async () => {
       expect(await this.chef.poolLength()).to.be.bignumber.equal("1");
+    });
+    it("Test getPoolReward", async () => {
+      expect(await this.chef.getPoolReward(START_BLOCK, BLOCK, DAO_BONUS));
+    });
+  });
+  describe("Test addPool", () => {
+    it("Reverts when pool already exists", async () => {
+      expectRevert(this.chef.add("1", END_BLOCK), "Id already exists");
     });
   });
 });

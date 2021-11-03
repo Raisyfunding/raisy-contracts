@@ -128,7 +128,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         onlyOwner
         nonDuplicated(_campaignId)
     {
-        require(poolId1[_campaignId] == 0, "RaisyChef::add: id already exists");
+        require(poolId1[_campaignId] == 0, "Id already exists");
 
         uint256 lastRewardBlock = block.number > START_BLOCK
             ? block.number
@@ -219,7 +219,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
             forDao = 0;
         } else {
             // Otherwise, give the farmer their full amount and also give some
-            // extra to the dev, LP, com, and founders wallets.
+            // extra to the dao.
             forDao = amount.mul(PERCENT_FOR_DAO).div(100);
             forFarmer = amount;
         }
