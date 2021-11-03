@@ -67,8 +67,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
     }
 
     /// @notice Maximum and Minimum campaigns' duration
-    uint256 public maxDuration = 20;
-    uint256 public minDuration = 200;
+    uint256 public maxDuration = 200;
+    uint256 public minDuration = 20;
 
     /// @notice Latest campaign ID
     CountersUpgradeable.Counter private _campaignIdCounter;
@@ -126,6 +126,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
             "You're not the creator ."
         );
         _;
+    }
+
+    /// @notice Contract initializer
+    function initialize() public initializer {
+        __Ownable_init();
+        __ReentrancyGuard_init();
     }
 
     /// @notice Add a campaign without any release schedule

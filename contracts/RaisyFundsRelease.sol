@@ -167,7 +167,10 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         // require(_hasProofOfDonation, "No POD for this campaign.");
 
-        require(podClaimed[_campaignId][msg.sender], "No PoD for this campaign.");
+        require(
+            podClaimed[_campaignId][msg.sender],
+            "No PoD for this campaign."
+        );
 
         _;
     }
@@ -339,7 +342,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
 
         voteSession[_campaignId].inProgress = false;
-        
+
         if (voteSession[_campaignId].voteRatio >= 0) {
             voteSession[_campaignId].numUnsuccessfulVotes = 0;
             delete voteSession[_campaignId];
