@@ -10,7 +10,23 @@ import "./RaisyFundsRelease.sol";
 interface IRaisyChef {
     function add(uint256, uint256) external;
 
-    function deposit(address,uint256, uint256) external;
+    function deposit(
+        address,
+        uint256,
+        uint256
+    ) external;
+
+    function claimRewards(address, uint256) external;
+}
+
+interface IRaisyPriceFeed {
+    function wAVAX() external view returns (address);
+
+    function getPrice(address) external view returns (int256, uint8);
+}
+
+interface IAgoraTokenRegistry {
+    function enabled(address) external view returns (bool);
 }
 
 /// @title Main Smart Contract of the architecture
@@ -51,7 +67,15 @@ contract RaisyCampaigns is RaisyFundsRelease {
     event Refund(
         uint256 campaignId,
         address indexed user,
-        uint256 refundAmount
+        uint256 refundAmount,
+        address payToken
+    );
+
+    event WithdrawFunds(
+        uint256 campaignId,
+        address indexed user,
+        uint256 amount,
+        address payToken
     );
 
     event MoreFundsAsked(uint256 campaignId, address indexed creator);
@@ -63,9 +87,15 @@ contract RaisyCampaigns is RaisyFundsRelease {
         bool isOver;
         uint256 duration;
         uint256 startBlock;
-        uint256 amountToRaise;
-        uint256 amountRaised;
+        uint256 amountToRaise; // IN USD w/ 18 decimals e.g 25 USD = 25 * 10 ** 18
+        uint256 amountRaised; // IN USD w/ 18 decimals e.g 25 USD = 25 * 10 ** 18
         bool hasReleaseSchedule;
+    }
+
+    /// @notice Structure for a donation
+    struct Donation {
+        uint256 amountInUSD; // Total amount given in USD
+        mapping(address => uint256) amountPerToken;
     }
 
     /// @notice Maximum and Minimum campaigns' duration
@@ -81,8 +111,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
     /// @notice Campaign ID -> bool
     mapping(uint256 => bool) public campaignExistence;
 
-    /// @notice address -> Campaign ID -> amount donated
-    mapping(address => mapping(uint256 => uint256)) public userDonations;
+    /// @notice address -> Campaign ID -> Donation
+    mapping(address => mapping(uint256 => Donation)) public userDonations;
 
     /// @notice Campaign ID -> funds already claimed
     mapping(uint256 => uint256) public campaignFundsClaimed;
@@ -233,27 +263,40 @@ contract RaisyCampaigns is RaisyFundsRelease {
     ) external isNotOver(_campaignId) exists(_campaignId) nonReentrant {
         require(_amount > 0, "Donation must be positive.");
 
+        _validPayToken(_payToken);
+
         IERC20 payToken = IERC20(_payToken);
 
         // If the donation is in $RSY then deposit in the pool
         if (_payToken == addressRegistry.raisyToken()) {
             IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
             raisyChef.deposit(msg.sender, _campaignId, _amount);
-        } else {
-            // Transfer the donation to the contract
-            payToken.safeTransferFrom(msg.sender, address(this), _amount);
         }
 
-        // Update the mappings
-        allCampaigns[_campaignId].amountRaised += _amount;
+        // Transfer the donation to the contract
+        payToken.safeTransferFrom(msg.sender, address(this), _amount);
 
-        if (userDonations[msg.sender][_campaignId] == 0)
+        // Update the mappings
+        (int256 _tokenPrice, ) = getPrice(_payToken);
+
+        // E.g : _amount = 10 AVAX = 10 * 1e18
+        // AVAX Price is 100 USD => amountInUSD = 100 * 1e18 * 10 * 1e18 / 1e18 = 1000 * 1e18
+        uint256 amountInUSD = (uint256(_tokenPrice) * _amount) /
+            (uint256(10)**18);
+
+        allCampaigns[_campaignId].amountRaised += amountInUSD;
+
+        // If it's the first time the user is donating increment the number of donors
+        if (userDonations[msg.sender][_campaignId].amountInUSD == 0)
             nbDonors[_campaignId]++;
 
-        userDonations[msg.sender][_campaignId] += _amount;
+        userDonations[msg.sender][_campaignId].amountPerToken[
+            _payToken
+        ] += _amount;
+        userDonations[msg.sender][_campaignId].amountInUSD += amountInUSD;
 
         // Emit donation event
-        emit NewDonation(_campaignId, msg.sender, _amount, _payToken);
+        emit NewDonation(_campaignId, msg.sender, amountInUSD, _payToken);
     }
 
     function claimProofOfDonation(uint256 _campaignId)
@@ -262,14 +305,17 @@ contract RaisyCampaigns is RaisyFundsRelease {
         nonReentrant
     {
         require(allCampaigns[_campaignId].isOver, "Campaign is not over.");
-        require(userDonations[msg.sender][_campaignId] > 0, "No PoD to claim.");
+        require(
+            userDonations[msg.sender][_campaignId].amountInUSD > 0,
+            "No PoD to claim."
+        );
         require(!podClaimed[_campaignId][msg.sender], "PoD already claimed.");
 
         // Mint Raisy NFT
         IRaisyNFT raisyNFT = IRaisyNFT(addressRegistry.raisyNFT());
 
         IRaisyNFT.DonationInfo memory donationInfo = IRaisyNFT.DonationInfo(
-            userDonations[msg.sender][_campaignId],
+            userDonations[msg.sender][_campaignId].amountInUSD,
             addressRegistry.raisyToken(),
             _campaignId,
             msg.sender,
@@ -300,7 +346,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         require(
             !allCampaigns[_campaignId].isOver,
-            "Initial Funds Release already triggered."
+            "Initial funds already claimed."
         );
 
         IERC20 payToken = IERC20(addressRegistry.raisyToken());
@@ -395,7 +441,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
         emit MoreFundsAsked(_campaignId, msg.sender);
     }
 
-    function getFundsBack(uint256 _campaignId)
+    function getFundsBack(uint256 _campaignId, address _payToken)
         external
         exists(_campaignId)
         isOver(_campaignId)
@@ -405,26 +451,102 @@ contract RaisyCampaigns is RaisyFundsRelease {
         nonReentrant
     {
         require(
-            userDonations[msg.sender][_campaignId] > 0,
-            "No more funds to withdraw."
+            userDonations[msg.sender][_campaignId].amountPerToken[_payToken] >
+                0,
+            "Nothing to withdraw."
         );
 
-        IERC20 payToken = IERC20(addressRegistry.raisyToken());
+        _validPayToken(_payToken);
 
-        uint256 refundAmount = (userDonations[msg.sender][_campaignId] *
+        IERC20 payToken = IERC20(_payToken);
+
+        uint256 refundAmount = (userDonations[msg.sender][_campaignId]
+            .amountPerToken[_payToken] *
             (10000 - campaignSchedule[_campaignId].pctReleased)) / 10000;
 
         if (refundAmount > 0) {
             // Transfer the funds back to the user
             payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
 
-            userDonations[msg.sender][_campaignId] = 0;
+            userDonations[msg.sender][_campaignId].amountPerToken[
+                _payToken
+            ] = 0;
         }
 
-        emit Refund(_campaignId, msg.sender, refundAmount);
+        emit Refund(_campaignId, msg.sender, refundAmount, _payToken);
     }
 
-    //TODO: Write functions which calls harvest and withdraw functions in RaisyChef
-    // 1. All the funds have been released -> the donor can now safely claim his rewards
-    // 2. The campaign didn't reach its objective -> the donor can withdraw his funds and harvest without any lock period
+    /// @notice The campaign didn't reach its objective -> the donor can withdraw his funds and claim rewards
+    function withdrawFunds(uint256 _campaignId, address _payToken)
+        external
+        exists(_campaignId)
+        isOver(_campaignId)
+        nonReentrant
+    {
+        require(
+            allCampaigns[_campaignId].amountRaised <
+                allCampaigns[_campaignId].amountToRaise,
+            "Campaign has been successful."
+        );
+        require(
+            userDonations[msg.sender][_campaignId].amountPerToken[_payToken] >
+                0,
+            "No more funds to withdraw."
+        );
+
+        uint256 refundAmount = userDonations[msg.sender][_campaignId]
+            .amountPerToken[_payToken];
+
+        IERC20 payToken = IERC20(_payToken);
+
+        if (refundAmount > 0) {
+            // Transfer the funds back to the user
+            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
+
+            userDonations[msg.sender][_campaignId].amountPerToken[
+                _payToken
+            ] = 0;
+        }
+
+        // Claim rewards from the RaisyChef
+        IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
+        raisyChef.claimRewards(msg.sender, _campaignId);
+
+        emit WithdrawFunds(_campaignId, msg.sender, refundAmount, _payToken);
+    }
+
+    function _validPayToken(address _payToken) internal view {
+        require(
+            _payToken == address(0) ||
+                (addressRegistry.tokenRegistry() != address(0) &&
+                    IAgoraTokenRegistry(addressRegistry.tokenRegistry())
+                        .enabled(_payToken)),
+            "invalid pay token"
+        );
+    }
+
+    /**
+     @notice Method for getting price for pay token
+     @param _payToken Paying token
+     */
+    function getPrice(address _payToken) public view returns (int256, uint8) {
+        int256 unitPrice;
+        uint8 decimals;
+        IRaisyPriceFeed priceFeed = IRaisyPriceFeed(
+            addressRegistry.priceFeed()
+        );
+
+        if (_payToken == address(0)) {
+            (unitPrice, decimals) = priceFeed.getPrice(priceFeed.wAVAX());
+        } else {
+            (unitPrice, decimals) = priceFeed.getPrice(_payToken);
+        }
+        if (decimals < 18) {
+            unitPrice = unitPrice * (int256(10)**(18 - decimals));
+        } else {
+            unitPrice = unitPrice / (int256(10)**(decimals - 18));
+        }
+
+        return (unitPrice, decimals);
+    }
 }

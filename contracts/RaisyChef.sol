@@ -50,6 +50,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 endBlock; // Last block number where RAISY distribution ends.
         uint256 lastRewardBlock; // Last block number that RAISY distribution occurs.
         uint256 accRaisyPerShare; // Accumulated RAISY per share, times 1e12. See below.
+        uint256 amountStaked; // Amount of RAISY staked in the pool
         uint256 daoBonusMultiplier; // Bonus Multiplier which can be set by the Raisy DAO
     }
 
@@ -59,6 +60,8 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     address public devaddr;
     // DAO Treasury Address
     address public daotreasuryaddr;
+    // Total Raisy Staked
+    uint256 public totalRaisyStaked;
     // RAISY created per block.
     uint256 public REWARD_PER_BLOCK;
 
@@ -142,6 +145,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                 endBlock: _endBlock,
                 lastRewardBlock: lastRewardBlock,
                 accRaisyPerShare: 0,
+                amountStaked: 0,
                 daoBonusMultiplier: 1
             })
         );
@@ -164,13 +168,18 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         if (_getBlock() <= pool.lastRewardBlock) {
             return;
         }
-        uint256 lpSupply = Raisy.balanceOf(address(this));
+
+        // Amount of $RSY staked in the pool
+        uint256 lpSupply = pool.amountStaked;
+
         if (lpSupply == 0) {
             pool.lastRewardBlock = _getBlock();
             return;
         }
+
         uint256 RaisyForFarmer;
         uint256 RaisyForDao;
+
         (RaisyForFarmer, RaisyForDao) = getPoolReward(
             pool.lastRewardBlock,
             _getBlock(),
@@ -181,7 +190,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         Raisy.mint(address(this), RaisyForFarmer);
 
         pool.accRaisyPerShare = pool.accRaisyPerShare.add(
-            RaisyForFarmer.mul(1e12).div(lpSupply)
+            RaisyForFarmer.mul(1e12).div(totalRaisyStaked)
         );
 
         pool.lastRewardBlock = _getBlock();
@@ -225,7 +234,8 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accRaisyPerShare = pool.accRaisyPerShare;
-        uint256 lpSupply = Raisy.balanceOf(address(this));
+        uint256 lpSupply = pool.amountStaked;
+
         if (_getBlock() > pool.lastRewardBlock && lpSupply > 0) {
             uint256 RaisyForFarmer;
             (RaisyForFarmer, ) = getPoolReward(
@@ -234,25 +244,20 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                 pool.daoBonusMultiplier
             );
             accRaisyPerShare = accRaisyPerShare.add(
-                RaisyForFarmer.mul(1e12).div(lpSupply)
+                RaisyForFarmer.mul(1e12).div(totalRaisyStaked)
             );
         }
+
         return user.amount.mul(accRaisyPerShare).div(1e12).sub(user.rewardDebt);
     }
 
-    function claimRewards(uint256[] memory _pids) public {
-        for (uint256 i = 0; i < _pids.length; i++) {
-            claimReward(_pids[i]);
-        }
-    }
-
-    function claimReward(uint256 _pid) public {
+    function claimRewards(address _to, uint256 _pid) external {
         updatePool(_pid);
-        _harvest(_pid);
+        _harvest(_to, _pid);
     }
 
     // lock a % of reward if it comes from bonus time.
-    function _harvest(uint256 _pid) internal {
+    function _harvest(address _to, uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 
@@ -293,9 +298,9 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                     rewards = pending.mul(unlock_pct);
                 }
 
-                Raisy.transfer(msg.sender, rewards);
+                Raisy.transfer(_to, rewards);
 
-                emit SendGovernanceTokenReward(msg.sender, _pid, rewards);
+                emit SendGovernanceTokenReward(_to, _pid, rewards);
             }
 
             // Recalculate the rewardDebt for the user.
@@ -309,7 +314,12 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     }
 
     // Deposit Raisy in a pool to RaisyChef for RAISY allocation.
-    function deposit(address _from, uint256 _pid, uint256 _amount) external nonReentrant onlyOwner {
+    // @dev Only RaisyCampaigns can call this function
+    function deposit(
+        address _from,
+        uint256 _pid,
+        uint256 _amount
+    ) external nonReentrant onlyOwner {
         require(
             _amount > 0,
             "RaisyChef::deposit: amount must be greater than 0"
@@ -321,14 +331,19 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
         // When a user deposits, we need to update the pool and harvest beforehand,
         // since the rates will change.
-        updatePool(_pid);
-        _harvest(_pid);
+        // _harvest(_pid);
 
-        IERC20(Raisy).safeTransferFrom(
-            _from,
-            address(this),
-            _amount
-        );
+        // IERC20(Raisy).safeTransferFrom(
+        //     _from,
+        //     address(this),
+        //     _amount
+        // );
+
+        updatePool(_pid);
+
+        // Update staking amounts
+        totalRaisyStaked += _amount;
+        pool.amountStaked += _amount;
 
         user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
