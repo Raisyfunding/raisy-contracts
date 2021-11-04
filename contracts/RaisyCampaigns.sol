@@ -277,12 +277,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
         payToken.safeTransferFrom(msg.sender, address(this), _amount);
 
         // Update the mappings
-        (int256 _tokenPrice, ) = getPrice(_payToken);
+        (int256 _tokenPrice, uint8 _decimals) = getPrice(_payToken);
 
-        // E.g : _amount = 10 AVAX = 10 * 1e18
-        // AVAX Price is 100 USD => amountInUSD = 100 * 1e18 * 10 * 1e18 / 1e18 = 1000 * 1e18
+        // E.g : _amount = 10 WBTC = 10 * 1e8
+        // WBTC Price is 100 USD => amountInUSD = 100 * 1e18 * 10 * 1e8 / 1e18 = 1000 * 1e18
         uint256 amountInUSD = (uint256(_tokenPrice) * _amount) /
-            (uint256(10)**18);
+            (uint256(10)**_decimals);
 
         allCampaigns[_campaignId].amountRaised += amountInUSD;
 
