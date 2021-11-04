@@ -128,10 +128,8 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         onlyOwner
         nonDuplicated(_campaignId)
     {
-        require(poolId1[_campaignId] == 0, "Id already exists");
-
-        uint256 lastRewardBlock = block.number > START_BLOCK
-            ? block.number
+        uint256 lastRewardBlock = _getBlock() > START_BLOCK
+            ? _getBlock()
             : START_BLOCK;
 
         poolId1[_campaignId] = poolInfo.length + 1;
@@ -155,7 +153,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 _endBlock,
         uint256 _daoBonusMultiplier
     ) external onlyOwner {
-        require(_endBlock > block.number, "End block in the past");
+        require(_endBlock > _getBlock(), "End block in the past");
         poolInfo[_pid].endBlock = _endBlock;
         poolInfo[_pid].daoBonusMultiplier = _daoBonusMultiplier;
     }
@@ -163,19 +161,19 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     // Update reward variables of the given pool to be up-to-date.
     function updatePool(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
-        if (block.number <= pool.lastRewardBlock) {
+        if (_getBlock() <= pool.lastRewardBlock) {
             return;
         }
         uint256 lpSupply = Raisy.balanceOf(address(this));
         if (lpSupply == 0) {
-            pool.lastRewardBlock = block.number;
+            pool.lastRewardBlock = _getBlock();
             return;
         }
         uint256 RaisyForFarmer;
         uint256 RaisyForDao;
         (RaisyForFarmer, RaisyForDao) = getPoolReward(
             pool.lastRewardBlock,
-            block.number,
+            _getBlock(),
             pool.daoBonusMultiplier
         );
 
@@ -186,7 +184,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
             RaisyForFarmer.mul(1e12).div(lpSupply)
         );
 
-        pool.lastRewardBlock = block.number;
+        pool.lastRewardBlock = _getBlock();
 
         if (RaisyForDao > 0) {
             Raisy.mint(daotreasuryaddr, RaisyForDao);
@@ -228,11 +226,11 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accRaisyPerShare = pool.accRaisyPerShare;
         uint256 lpSupply = Raisy.balanceOf(address(this));
-        if (block.number > pool.lastRewardBlock && lpSupply > 0) {
+        if (_getBlock() > pool.lastRewardBlock && lpSupply > 0) {
             uint256 RaisyForFarmer;
             (RaisyForFarmer, ) = getPoolReward(
                 pool.lastRewardBlock,
-                block.number,
+                _getBlock(),
                 pool.daoBonusMultiplier
             );
             accRaisyPerShare = accRaisyPerShare.add(
@@ -258,7 +256,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 
-        require(block.number >= pool.endBlock, "Campaign is not over yet.");
+        require(_getBlock() >= pool.endBlock, "Campaign is not over yet.");
 
         // Only harvest if the user amount is greater than 0.
         if (user.amount > 0) {
@@ -284,12 +282,12 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                 // those tokens from RaisyChef to their wallet.
                 uint256 rewards;
 
-                if (block.number >= pool.endBlock + LOCK_DURATION) {
+                if (_getBlock() >= pool.endBlock + LOCK_DURATION) {
                     // Transfer all the rewards if the linear vesting is finished
                     rewards = pending;
                 } else {
                     // Transfer rewards determined by the linear vesting ratio
-                    uint256 unlock_pct = block.number.sub(pool.endBlock).div(
+                    uint256 unlock_pct = _getBlock().sub(pool.endBlock).div(
                         LOCK_DURATION
                     );
                     rewards = pending.mul(unlock_pct);
@@ -371,5 +369,9 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     // Update START_BLOCK
     function starblockUpdate(uint256 _newstarblock) public onlyOwner {
         START_BLOCK = _newstarblock;
+    }
+
+    function _getBlock() internal view virtual returns (uint256) {
+        return block.number;
     }
 }

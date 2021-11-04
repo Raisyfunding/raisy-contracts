@@ -10,7 +10,7 @@ const {
 } = require("@openzeppelin/test-helpers");
 
 const RaisyToken = artifacts.require("RaisyToken");
-const RaisyChef = artifacts.require("RaisyChef");
+const RaisyChef = artifacts.require("MockRaisyChef");
 
 contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
   const MAX_SUPPLY = new BN(ether("10000000"));
@@ -51,7 +51,10 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
   });
   describe("Test addPool", () => {
     it("Reverts when pool already exists", async () => {
-      expectRevert(this.chef.add("1", END_BLOCK), "Id already exists");
+      await expectRevert(
+        this.chef.add("1", END_BLOCK),
+        "RaisyChef::nonDuplicated: duplicated"
+      );
     });
     it("Successfully adds a pool", async () => {
       await this.chef.add("2", END_BLOCK);
@@ -60,20 +63,31 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
   });
   describe("Test setPool", () => {
     it("reverts when not owner", async () => {
-      expectRevert(
-        this.chef.set("1", END_BLOCK, DAO_BONUS, {
+      await expectRevert(
+        this.chef.set("0", END_BLOCK, DAO_BONUS, {
           from: projectowner,
         }),
         "Ownable: caller is not the owner"
       );
-      it("Successfully change the pool", async () => {
-        expect(
-          await this.chef.set("1", BLOCK, DAO_BONUS, {
-            from: owner,
-          })
-        );
+    });
+
+    it("Successfully change the pool", async () => {
+      await this.chef.set("0", BLOCK, DAO_BONUS, {
+        from: owner,
       });
-      //Check enblock>block.number with mock contract
+      const poolinfo = await this.chef.poolInfo.call(0);
+      expect(poolinfo.endBlock).to.be.bignumber.equal(BLOCK);
+    });
+
+    //Check enblock>block.number with mock contract
+    it("reverts when enblock in the past", async () => {
+      await this.chef.setBlockOverride(END_BLOCK);
+      await expectRevert(
+        this.chef.set("0", BLOCK, DAO_BONUS, {
+          from: owner,
+        }),
+        "End block in the past"
+      );
     });
   });
 });
