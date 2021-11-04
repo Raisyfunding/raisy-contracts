@@ -494,6 +494,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
             "No more funds to withdraw."
         );
 
+        _validPayToken(_payToken);
+
         uint256 refundAmount = userDonations[msg.sender][_campaignId]
             .amountPerToken[_payToken];
 
