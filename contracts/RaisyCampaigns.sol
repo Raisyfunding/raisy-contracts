@@ -9,6 +9,8 @@ import "./RaisyFundsRelease.sol";
 
 interface IRaisyChef {
     function add(uint256, uint256) external;
+
+    function deposit(address,uint256, uint256) external;
 }
 
 /// @title Main Smart Contract of the architecture
@@ -231,9 +233,16 @@ contract RaisyCampaigns is RaisyFundsRelease {
     ) external isNotOver(_campaignId) exists(_campaignId) nonReentrant {
         require(_amount > 0, "Donation must be positive.");
 
-        // Transfer the donation to the contract
         IERC20 payToken = IERC20(_payToken);
-        payToken.safeTransferFrom(msg.sender, address(this), _amount);
+
+        // If the donation is in $RSY then deposit in the pool
+        if (_payToken == addressRegistry.raisyToken()) {
+            IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
+            raisyChef.deposit(msg.sender, _campaignId, _amount);
+        } else {
+            // Transfer the donation to the contract
+            payToken.safeTransferFrom(msg.sender, address(this), _amount);
+        }
 
         // Update the mappings
         allCampaigns[_campaignId].amountRaised += _amount;
@@ -414,4 +423,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         emit Refund(_campaignId, msg.sender, refundAmount);
     }
+
+    //TODO: Write functions which calls harvest and withdraw functions in RaisyChef
+    // 1. All the funds have been released -> the donor can now safely claim his rewards
+    // 2. The campaign didn't reach its objective -> the donor can withdraw his funds and harvest without any lock period
 }

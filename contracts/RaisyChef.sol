@@ -311,7 +311,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     }
 
     // Deposit Raisy in a pool to RaisyChef for RAISY allocation.
-    function deposit(uint256 _pid, uint256 _amount) public nonReentrant {
+    function deposit(address _from, uint256 _pid, uint256 _amount) external nonReentrant onlyOwner {
         require(
             _amount > 0,
             "RaisyChef::deposit: amount must be greater than 0"
@@ -327,7 +327,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         _harvest(_pid);
 
         IERC20(Raisy).safeTransferFrom(
-            address(msg.sender),
+            _from,
             address(this),
             _amount
         );
@@ -335,7 +335,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
 
-        emit Deposit(msg.sender, _pid, _amount);
+        emit Deposit(_from, _pid, _amount);
     }
 
     // Safe Raisy transfer function, just in case if rounding error causes pool to not have enough Raisys.
@@ -349,7 +349,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         }
         require(
             transferSuccess,
-            "MasterGardener::safeRaisyTransfer: transfer failed"
+            "RaisyChef::safeRaisyTransfer: transfer failed"
         );
     }
 
