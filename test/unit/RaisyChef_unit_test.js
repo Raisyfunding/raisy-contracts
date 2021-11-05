@@ -30,7 +30,6 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
 
     this.chef = await RaisyChef.new(
       this.raisyToken.address,
-      owner,
       daotreasuryadd,
       REW_PER_BLOCK,
       LOCK,

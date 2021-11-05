@@ -5,20 +5,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
-
-interface IRaisyAddressRegistry {
-    function raisyChef() external view returns (address);
-
-    function tokenRegistry() external view returns (address);
-
-    function priceFeed() external view returns (address);
-
-    function raisyNFT() external view returns (address);
-
-    function raisyToken() external view returns (address);
-
-    function raisyCampaigns() external view returns (address);
-}
+import "./interfaces/IRaisyAddressRegistry.sol";
 
 interface IRaisyNFT {
     struct DonationInfo {
@@ -364,7 +351,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     {
         require(!refundVotes[_campaignId][msg.sender], "Only 1 vote per user.");
 
-        refundVotes[_campaignId][msg.sender];
+        refundVotes[_campaignId][msg.sender] = true;
 
         campaignSchedule[_campaignId].wantsRefund++;
 
