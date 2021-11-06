@@ -15,11 +15,13 @@ const RaisyChef = artifacts.require("MockRaisyChef");
 contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
   const MAX_SUPPLY = new BN(ether("10000000"));
   const REW_PER_BLOCK = new BN("10");
+  const NEW_REW = new BN("5");
   const LOCK = new BN("100");
   const START_BLOCK = new BN("1");
   const BLOCK = new BN("1000");
   const END_BLOCK = new BN("15000");
   const ONE_THOUSAND = new BN(ether("1000"));
+  const TWO_THOUSAND = new BN(ether("2000"));
   const DAO_BONUS = new BN("2");
 
   beforeEach(async () => {
@@ -101,11 +103,90 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
     it("Successfully claims rewards", async () => {
       await this.chef.setBlockOverride(END_BLOCK + 1000);
       const _balancee = await this.raisyToken.balanceOf(owner);
-      console.log(_balancee.toString());
       await this.chef.claimRewards(owner, "0");
       const _balance = await this.raisyToken.balanceOf(owner);
-      console.log(_balance.toString());
       expect(_balance).to.be.bignumber.greaterThan(ONE_THOUSAND);
+    });
+  });
+  describe("Tests deposit", () => {
+    it("Reverts when not owner", async () => {
+      await expectRevert(
+        this.chef.deposit(projectowner, "0", ONE_THOUSAND, {
+          from: projectowner,
+        }),
+        "Ownable: caller is not the owner"
+      );
+    });
+    it("Reverts when wrong amount", async () => {
+      await expectRevert(
+        this.chef.deposit(owner, "0", "0"),
+        "Amount must be greater than 0"
+      );
+    });
+    it("successfully deposit", async () => {
+      await this.chef.deposit(owner, "0", ONE_THOUSAND, { from: owner });
+      const poolinfo = await this.chef.poolInfo.call(0);
+      expect(poolinfo.amountStaked).to.be.bignumber.equal(TWO_THOUSAND);
+    });
+  });
+  describe("Test daoTreasuryUpdate", () => {
+    it("reverts when not Authorized", async () => {
+      await expectRevert(
+        this.chef.daoTreasuryUpdate(owner, { from: projectowner }),
+        "caller is not authorized"
+      );
+    });
+    it("successfully change the address", async () => {
+      await this.chef.daoTreasuryUpdate(this.raisyToken.address, {
+        from: owner,
+      });
+      const dao = await this.chef.daotreasuryaddr.call();
+      await expect(dao).to.be.equal(this.raisyToken.address);
+    });
+  });
+  describe("Test rewardUpdate", () => {
+    it("reverts when not Authorized", async () => {
+      await expectRevert(
+        this.chef.rewardUpdate(owner, { from: projectowner }),
+        "caller is not authorized"
+      );
+    });
+    it("successfully change the address", async () => {
+      await this.chef.rewardUpdate(NEW_REW, {
+        from: owner,
+      });
+      const reward = await this.chef.rewardPerBlock.call();
+      await expect(reward).to.be.bignumber.equal(NEW_REW);
+    });
+  });
+  describe("Test starblockUpdate", () => {
+    it("reverts when not Owner", async () => {
+      await expectRevert(
+        this.chef.starblockUpdate(owner, { from: projectowner }),
+        "Ownable: caller is not the owner"
+      );
+    });
+    it("successfully change the address", async () => {
+      await this.chef.starblockUpdate(NEW_REW, {
+        from: owner,
+      });
+      const block = await this.chef.startBlock.call();
+      await expect(block).to.be.bignumber.equal(NEW_REW);
+    });
+  });
+  describe("Test daoRewardsUpdate", () => {
+    it("reverts when not Authorized", async () => {
+      await expectRevert(
+        this.chef.daoRewardsUpdate(owner, { from: projectowner }),
+        "caller is not authorized"
+      );
+    });
+    it("successfully change the dao percent", async () => {
+      await this.chef.daoRewardsUpdate(NEW_REW, {
+        from: owner,
+      });
+      const daorew = await this.chef.percentForDao.call();
+      await expect(daorew).to.be.bignumber.equal(NEW_REW);
     });
   });
 });
