@@ -9,12 +9,13 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./RaisyToken.sol";
+import "./Authorizable.sol";
 
 /// @title RaisyChef
 /// @author RaisyFunding
 /// @notice Manages the staking process of $RSY into each pool which refers to a campaign
 /// @dev Inspired by the masterchef used in yield farming
-contract RaisyChef is Ownable, ReentrancyGuard {
+contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -61,15 +62,15 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     // Total Raisy Staked
     uint256 public totalRaisyStaked;
     // RAISY created per block.
-    uint256 public REWARD_PER_BLOCK;
+    uint256 public rewardPerBlock;
 
     // @notice The block number when RAISY mining starts.
-    uint256 public START_BLOCK;
+    uint256 public startBlock;
 
-    uint256 public PERCENT_FOR_DAO = 1; // Rewards for DAO Treasury
+    uint256 public percentForDao = 1; // Rewards for DAO Treasury
 
     // @notice Linear vesting duration on staking rewards
-    uint256 public LOCK_DURATION;
+    uint256 public lockDuration;
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
@@ -97,16 +98,12 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
     /// @notice Modifiers
     modifier nonDuplicated(uint256 _campaignId) {
-        require(
-            poolExistence[_campaignId] == false,
-            "RaisyChef::nonDuplicated: duplicated"
-        );
+        require(poolExistence[_campaignId] == false, "RaisyChef::duplicated");
         _;
     }
 
     /// @notice Constructor
     /// @param _Raisy RaisyToken
-    /// @param _devaddrr Address of the dev
     /// @param _daotreasuryaddr Address of the DAO treasury
     /// @param _rewardPerBlock Raisy distributed per block, corresponding to the linear vesting (tokenomics whitepaper)
     /// @param _lockDuration Duration of the locking after the campaign ends
@@ -120,9 +117,9 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     ) {
         Raisy = _Raisy;
         daotreasuryaddr = _daotreasuryaddr;
-        REWARD_PER_BLOCK = _rewardPerBlock;
-        START_BLOCK = _startBlock;
-        LOCK_DURATION = _lockDuration;
+        rewardPerBlock = _rewardPerBlock;
+        startBlock = _startBlock;
+        lockDuration = _lockDuration;
     }
 
     /// @notice View returns the number of pools
@@ -140,9 +137,9 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         onlyOwner
         nonDuplicated(_campaignId)
     {
-        uint256 lastRewardBlock = _getBlock() > START_BLOCK
+        uint256 lastRewardBlock = _getBlock() > startBlock
             ? _getBlock()
-            : START_BLOCK;
+            : startBlock;
 
         poolId1[_campaignId] = poolInfo.length + 1;
 
@@ -192,26 +189,26 @@ contract RaisyChef is Ownable, ReentrancyGuard {
             return;
         }
 
-        uint256 RaisyForFarmer;
-        uint256 RaisyForDao;
+        uint256 raisyForFarmer;
+        uint256 raisyForDao;
 
-        (RaisyForFarmer, RaisyForDao) = getPoolReward(
+        (raisyForFarmer, raisyForDao) = getPoolReward(
             pool.lastRewardBlock,
             _getBlock(),
             pool.daoBonusMultiplier
         );
 
         // Mint some new RAISY tokens for the farmer and store them in RaisyChef.
-        Raisy.mint(address(this), RaisyForFarmer);
+        Raisy.mint(address(this), raisyForFarmer);
 
         pool.accRaisyPerShare = pool.accRaisyPerShare.add(
-            RaisyForFarmer.mul(1e12).div(totalRaisyStaked)
+            raisyForFarmer.mul(1e12).div(totalRaisyStaked)
         );
 
         pool.lastRewardBlock = _getBlock();
 
-        if (RaisyForDao > 0) {
-            Raisy.mint(daotreasuryaddr, RaisyForDao);
+        if (raisyForDao > 0) {
+            Raisy.mint(daotreasuryaddr, raisyForDao);
         }
     }
 
@@ -219,29 +216,29 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     /// @param _from StartBlock of the calculation window
     /// @param _to EndBlock of the calculation window
     /// @param _daoBonusMultiplier Multiplier voted by the DAO, highest APR for this pool
-    /// @return The amount of Raisy for the farmer
-    /// @return The amount of Raisy for the DAO treasury
+    /// @return forFarmer The amount of Raisy for the farmer
+    /// @return forDao The amount of Raisy for the DAO treasury
     function getPoolReward(
         uint256 _from,
         uint256 _to,
         uint256 _daoBonusMultiplier
     ) public view returns (uint256 forFarmer, uint256 forDao) {
-        uint256 amount = _to.sub(_from).mul(REWARD_PER_BLOCK).mul(
+        uint256 amount = _to.sub(_from).mul(rewardPerBlock).mul(
             _daoBonusMultiplier
         );
-        uint256 GovernanceTokenCanMint = Raisy.maxsupplycap().sub(
+        uint256 governanceTokenCanMint = Raisy.maxsupplycap().sub(
             Raisy.totalSupply()
         );
 
-        if (GovernanceTokenCanMint < amount) {
+        if (governanceTokenCanMint < amount) {
             // If there aren't enough governance tokens left to mint before the cap,
             // just give all of the possible tokens left to the farmer.
-            forFarmer = GovernanceTokenCanMint;
+            forFarmer = governanceTokenCanMint;
             forDao = 0;
         } else {
             // Otherwise, give the farmer their full amount and also give some
             // extra to the dao.
-            forDao = amount.mul(PERCENT_FOR_DAO).div(100);
+            forDao = amount.mul(percentForDao).div(100);
             forFarmer = amount;
         }
     }
@@ -261,14 +258,14 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 lpSupply = pool.amountStaked;
 
         if (_getBlock() > pool.lastRewardBlock && lpSupply > 0) {
-            uint256 RaisyForFarmer;
-            (RaisyForFarmer, ) = getPoolReward(
+            uint256 raisyForFarmer;
+            (raisyForFarmer, ) = getPoolReward(
                 pool.lastRewardBlock,
                 _getBlock(),
                 pool.daoBonusMultiplier
             );
             accRaisyPerShare = accRaisyPerShare.add(
-                RaisyForFarmer.mul(1e12).div(totalRaisyStaked)
+                raisyForFarmer.mul(1e12).div(totalRaisyStaked)
             );
         }
 
@@ -317,13 +314,13 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                 // those tokens from RaisyChef to their wallet.
                 uint256 rewards;
 
-                if (_getBlock() >= pool.endBlock + LOCK_DURATION) {
+                if (_getBlock() >= pool.endBlock + lockDuration) {
                     // Transfer all the rewards if the linear vesting is finished
                     rewards = pending;
                 } else {
                     // Transfer rewards determined by the linear vesting ratio
                     uint256 unlockPct = _getBlock().sub(pool.endBlock).div(
-                        LOCK_DURATION
+                        lockDuration
                     );
                     rewards = pending.mul(unlockPct);
                 }
@@ -358,10 +355,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 _pid,
         uint256 _amount
     ) external nonReentrant onlyOwner {
-        require(
-            _amount > 0,
-            "RaisyChef::deposit: amount must be greater than 0"
-        );
+        require(_amount > 0, "Amount must be greater than 0");
 
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -394,45 +388,45 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     /// @param _to Address of the reciever
     /// @param _amount Amount of the transfer
     function safeRaisyTransfer(address _to, uint256 _amount) internal {
-        uint256 RaisyBal = Raisy.balanceOf(address(this));
+        uint256 raisyBal = Raisy.balanceOf(address(this));
         bool transferSuccess = false;
-        if (_amount > RaisyBal) {
-            transferSuccess = Raisy.transfer(_to, RaisyBal);
+        if (_amount > raisyBal) {
+            transferSuccess = Raisy.transfer(_to, raisyBal);
         } else {
             transferSuccess = Raisy.transfer(_to, _amount);
         }
-        require(
-            transferSuccess,
-            "RaisyChef::safeRaisyTransfer: transfer failed"
-        );
+        require(transferSuccess, "RaisyChef::Transfer failed");
     }
 
     /// @notice Update Address of the DAO treasury
-    /// @dev Only administrator
+    /// @dev Only Authorized
     /// @param _newDaoTreasury New address of the DAO treasury
-    function daoTreasuryUpdate(address _newDaoTreasury) public onlyOwner {
+    function daoTreasuryUpdate(address _newDaoTreasury) public onlyAuthorized {
         daotreasuryaddr = _newDaoTreasury;
     }
 
     /// @notice Update Reward Per Block
-    /// @dev Only Administrator
+    /// @dev Only Authorized
     /// @param _newReward New emission rate of Raisy
-    function rewardUpdate(uint256 _newReward) public onlyOwner {
-        REWARD_PER_BLOCK = _newReward;
+    function rewardUpdate(uint256 _newReward) public onlyAuthorized {
+        rewardPerBlock = _newReward;
     }
 
-    /// @notice Update START_BLOCK
+    /// @notice Update startBlock
     /// @dev Only owner
     /// @param _newstarblock New number for the start block
     function starblockUpdate(uint256 _newstarblock) public onlyOwner {
-        START_BLOCK = _newstarblock;
+        startBlock = _newstarblock;
     }
 
-    /// @notice Update PERCENT_FOR_DAO
-    /// @dev Only Administrator
+    /// @notice Update percentForDao
+    /// @dev Only Authorized
     /// @param _newDaoRewardsPercent New percentage for DAO treasury
-    function daoRewardsUpdate(uint256 _newDaoRewardsPercent) public onlyOwner {
-        PERCENT_FOR_DAO = _newDaoRewardsPercent;
+    function daoRewardsUpdate(uint256 _newDaoRewardsPercent)
+        public
+        onlyAuthorized
+    {
+        percentForDao = _newDaoRewardsPercent;
     }
 
     /// @notice View, gives the current block

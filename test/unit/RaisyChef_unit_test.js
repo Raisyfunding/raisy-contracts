@@ -89,4 +89,7 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
       );
     });
   });
+  describe("Test updatepool" () => {
+
+  })
 });
