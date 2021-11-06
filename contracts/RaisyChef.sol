@@ -199,7 +199,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         );
 
         // Mint some new RAISY tokens for the farmer and store them in RaisyChef.
-        Raisy.mint(address(this), raisyForFarmer);
+        Raisy.mint(address(this), raisyForFarmer); //Trusted external call
 
         pool.accRaisyPerShare = pool.accRaisyPerShare.add(
             raisyForFarmer.mul(1e12).div(totalRaisyStaked)
@@ -208,7 +208,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         pool.lastRewardBlock = _getBlock();
 
         if (raisyForDao > 0) {
-            Raisy.mint(daotreasuryaddr, raisyForDao);
+            Raisy.mint(daotreasuryaddr, raisyForDao); //Trusted external call
         }
     }
 
@@ -226,8 +226,8 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         uint256 amount = _to.sub(_from).mul(rewardPerBlock).mul(
             _daoBonusMultiplier
         );
-        uint256 governanceTokenCanMint = Raisy.maxsupplycap().sub(
-            Raisy.totalSupply()
+        uint256 governanceTokenCanMint = Raisy.maxsupplycap().sub( //Trusted external call
+            Raisy.totalSupply() //Trusted external call
         );
 
         if (governanceTokenCanMint < amount) {
@@ -303,7 +303,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
 
             // Make sure we aren't giving more tokens than we have in the
             // RaisyChef contract.
-            uint256 masterBal = Raisy.balanceOf(address(this));
+            uint256 masterBal = Raisy.balanceOf(address(this)); //Trusted external call
 
             if (pending > masterBal) {
                 pending = masterBal;
@@ -325,7 +325,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
                     rewards = pending.mul(unlockPct);
                 }
 
-                bool success = Raisy.transfer(_to, rewards);
+                bool success = Raisy.transfer(_to, rewards); //Trusted external call
                 require(success, "Failed to send rewards.");
 
                 emit SendGovernanceTokenReward(_to, _pid, rewards);
@@ -388,12 +388,12 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
     /// @param _to Address of the reciever
     /// @param _amount Amount of the transfer
     function safeRaisyTransfer(address _to, uint256 _amount) internal {
-        uint256 raisyBal = Raisy.balanceOf(address(this));
+        uint256 raisyBal = Raisy.balanceOf(address(this)); //Trusted external call
         bool transferSuccess = false;
         if (_amount > raisyBal) {
-            transferSuccess = Raisy.transfer(_to, raisyBal);
+            transferSuccess = Raisy.transfer(_to, raisyBal); //Trusted external call
         } else {
-            transferSuccess = Raisy.transfer(_to, _amount);
+            transferSuccess = Raisy.transfer(_to, _amount); //Trusted external call
         }
         require(transferSuccess, "RaisyChef::Transfer failed");
     }
