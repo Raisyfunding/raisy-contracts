@@ -18,7 +18,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    // Info of each user.
+    /// @notice Info of each user.
     struct UserInfo {
         uint256 amount; // How many tokens the user has provided.
         uint256 rewardDebt;
@@ -44,7 +44,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 globalAmount;
     }
 
-    // Info of each pool.
+    /// @notice Info of each pool.
     struct PoolInfo {
         uint256 campaignId; // ID of the associated campaign
         uint256 endBlock; // Last block number where RAISY distribution ends.
@@ -84,6 +84,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     mapping(address => UserGlobalInfo) public userGlobalInfo;
     mapping(uint256 => bool) public poolExistence;
 
+    /// @notice Events
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(
@@ -97,6 +98,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         uint256 amount
     );
 
+    /// @notice Modifiers
     modifier nonDuplicated(uint256 _campaignId) {
         require(
             poolExistence[_campaignId] == false,
@@ -105,6 +107,13 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         _;
     }
 
+    /// @notice Constructor
+    /// @param _Raisy RaisyToken
+    /// @param _devaddrr Address of the dev
+    /// @param _daotreasuryaddr Address of the DAO treasury
+    /// @param _rewardPerBlock Raisy distributed per block, corresponding to the linear vesting (tokenomics whitepaper)
+    /// @param _lockDuration Duration of the locking after the campaign ends
+    /// @param _startBlock Start block of farming
     constructor(
         RaisyToken _Raisy,
         address _devaddr,
@@ -121,11 +130,16 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         LOCK_DURATION = _lockDuration;
     }
 
+    /// @notice View returns the number of pools
+    /// @return Length of the pool
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
     }
 
-    // Add a new campaign pool. Can only be called by the owner.
+    /// @notice Add a new campaign pool.
+    /// @dev Can only be called by the owner.
+    /// @param _campaignId Id of the campaign
+    /// @param _endBlock End of the rewards (end of the campaign)
     function add(uint256 _campaignId, uint256 _endBlock)
         external
         onlyOwner
@@ -151,7 +165,11 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         );
     }
 
-    // Update the given pool's parameters. Can only be called by the owner.
+    /// @notice Update the given pool's parameters.
+    /// @dev Can only be called by the owner.
+    /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
+    /// @param _endBlock End of the rewards (end of the campaign)
+    /// @param _daoBonusMultiplier Multiplier voted by the DAO, highest APR for this pool
     function set(
         uint256 _pid,
         uint256 _endBlock,
@@ -162,7 +180,9 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         poolInfo[_pid].daoBonusMultiplier = _daoBonusMultiplier;
     }
 
-    // Update reward variables of the given pool to be up-to-date.
+    /// @notice Update reward variables of the given pool to be up-to-date.
+    /// @dev Anyone can call this function
+    /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
     function updatePool(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
         if (_getBlock() <= pool.lastRewardBlock) {
@@ -200,6 +220,12 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         }
     }
 
+    /// @notice View, gives the rewards of the pool
+    /// @param _from StartBlock of the calculation window
+    /// @param _to EndBlock of the calculation window
+    /// @param _daoBonusMultiplier Multiplier voted by the DAO, highest APR for this pool
+    /// @return The amount of Raisy for the farmer
+    /// @return The amount of Raisy for the DAO treasury
     function getPoolReward(
         uint256 _from,
         uint256 _to,
@@ -225,7 +251,10 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         }
     }
 
-    // View function to see pending RAISY on frontend.
+    /// @notice View function to see pending RAISY on frontend.
+    /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
+    /// @param _user Address of the farmer
+    /// @return Pending rewards for a farmer
     function pendingReward(uint256 _pid, address _user)
         external
         view
@@ -251,12 +280,18 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         return user.amount.mul(accRaisyPerShare).div(1e12).sub(user.rewardDebt);
     }
 
+    /// @notice claims rewards of the farmer
+    /// @param _to Address of the farmer who wants to claim their rewards
+    /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
     function claimRewards(address _to, uint256 _pid) external {
         updatePool(_pid);
         _harvest(_to, _pid);
     }
 
-    // lock a % of reward if it comes from bonus time.
+    /// @notice harvest function, called only after the end of the campaigns, implements the linear vesting
+    /// @dev Not a classic harvest function, it is enabled only at the end of the pool farm. Locks a % of reward if it comes from bonus time.
+    /// @param _to Address of the farmer who harvests
+    /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
     function _harvest(address _to, uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -308,13 +343,20 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         }
     }
 
+    /// @notice View, gets user's global amount
+    /// @param _user Address of the farmer
+    /// @return the global amount of the user
     function getGlobalAmount(address _user) public view returns (uint256) {
         UserGlobalInfo memory current = userGlobalInfo[_user];
         return current.globalAmount;
     }
 
-    // Deposit Raisy in a pool to RaisyChef for RAISY allocation.
-    // @dev Only RaisyCampaigns can call this function
+    /// @notice Deposit Raisy in a pool to RaisyChef for RAISY allocation.
+    /// @dev Only RaisyCampaigns can call this function (owner).
+    /// @dev There's no Raisy transfer from RaisyCampaign to this contract, only a structure update.
+    /// @param _from address who made the deposit
+    /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
+    /// @param _amount Amount of the deposit
     function deposit(
         address _from,
         uint256 _pid,
@@ -351,7 +393,10 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         emit Deposit(_from, _pid, _amount);
     }
 
-    // Safe Raisy transfer function, just in case if rounding error causes pool to not have enough Raisys.
+    /// @notice Safe Raisy transfer function
+    /// @dev Just in case if rounding error causes pool to not have enough Raisys.
+    /// @param _to Address of the reciever
+    /// @param _amount Amount of the transfer
     function safeRaisyTransfer(address _to, uint256 _amount) internal {
         uint256 RaisyBal = Raisy.balanceOf(address(this));
         bool transferSuccess = false;
@@ -366,26 +411,37 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         );
     }
 
-    // Update dev address by the previous dev.
+    /// @notice Update dev address
+    /// @dev Only owner
+    /// @param _devaddr Address of the new owner
     function dev(address _devaddr) public onlyOwner {
         devaddr = _devaddr;
     }
 
-    // Update founderaddr
+    /// @notice Update Address of the DAO treasury
+    /// @dev Only administrator
+    /// @param _newDaoTreasury New address of the DAO treasury
     function daoTreasuryUpdate(address _newDaoTreasury) public onlyOwner {
         daotreasuryaddr = _newDaoTreasury;
     }
 
-    // Update Reward Per Block
+    /// @notice Update Reward Per Block
+    /// @dev Only Administrator
+    /// @param _newReward New emission rate of Raisy
     function rewardUpdate(uint256 _newReward) public onlyOwner {
         REWARD_PER_BLOCK = _newReward;
     }
 
-    // Update START_BLOCK
+    /// @notice Update START_BLOCK
+    /// @dev Only owner
+    /// @param _newstarblock New number for the start block
     function starblockUpdate(uint256 _newstarblock) public onlyOwner {
         START_BLOCK = _newstarblock;
     }
 
+    /// @notice View, gives the current block
+    /// @dev Function to override for the tests (mockRaisyChef)
+    /// @return Current block
     function _getBlock() internal view virtual returns (uint256) {
         return block.number;
     }
