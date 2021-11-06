@@ -26,8 +26,7 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
     this.raisyToken = await RaisyToken.new("RaisyToken", "RSY", MAX_SUPPLY, {
       from: owner,
     });
-    this.raisyToken.mint(owner, ONE_THOUSAND, { from: owner });
-
+    await this.raisyToken.mint(owner, ONE_THOUSAND, { from: owner });
     this.chef = await RaisyChef.new(
       this.raisyToken.address,
       daotreasuryadd,
@@ -38,7 +37,8 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
         from: owner,
       }
     );
-    this.chef.add("1", END_BLOCK);
+    await this.raisyToken.transferOwnership(this.chef.address);
+    await this.chef.add("1", END_BLOCK);
   });
   describe("Test views", () => {
     it("Returns poollength", async () => {
@@ -52,7 +52,7 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
     it("Reverts when pool already exists", async () => {
       await expectRevert(
         this.chef.add("1", END_BLOCK),
-        "RaisyChef::nonDuplicated: duplicated"
+        "RaisyChef::duplicated"
       );
     });
     it("Successfully adds a pool", async () => {
@@ -89,7 +89,18 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
       );
     });
   });
-  describe("Test updatepool" () => {
-
-  })
+  describe("Test claimRewards", () => {
+    it("reverts when campaign not ended", async () => {
+      await this.chef.setBlockOverride(END_BLOCK - 1);
+      await expectRevert(
+        this.chef.claimRewards(owner, "0"),
+        "Campaign is not over yet."
+      );
+    });
+    it("Successfully claims rewards", async () => {
+      await this.chef.setBlockOverride(END_BLOCK + 1);
+      const ownerBalance = new BN(owner.balance);
+      // expect(ownerBalance).to.be.bignumber.greaterThan("1000");
+    });
+  });
 });
