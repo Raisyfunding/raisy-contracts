@@ -357,15 +357,18 @@ contract RaisyCampaigns is RaisyFundsRelease {
             uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
                 toReleasePct) / 10000;
 
+            campaignFundsClaimed[_campaignId] += toReleaseAmount;
+
             // Transfer the funds to the campaign's creator
             payToken.safeTransferFrom(
                 address(this),
                 msg.sender,
                 toReleaseAmount
             );
-
-            campaignFundsClaimed[_campaignId] += toReleaseAmount;
         } else {
+            campaignFundsClaimed[_campaignId] += allCampaigns[_campaignId]
+                .amountRaised;
+
             // Transfer the funds to the campaign's creator
 
             payToken.safeTransferFrom(
@@ -373,9 +376,6 @@ contract RaisyCampaigns is RaisyFundsRelease {
                 msg.sender,
                 allCampaigns[_campaignId].amountRaised
             );
-
-            campaignFundsClaimed[_campaignId] += allCampaigns[_campaignId]
-                .amountRaised;
         }
 
         // Enable Proof of Donation
@@ -410,10 +410,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
         uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
             toReleasePct) / 10000;
 
+        campaignFundsClaimed[_campaignId] += toReleaseAmount;
+
         // Transfer the funds to the campaign's creator
         payToken.safeTransferFrom(address(this), msg.sender, toReleaseAmount);
-
-        campaignFundsClaimed[_campaignId] += toReleaseAmount;
 
         // Emit the claim event
         emit FundsClaimed(_campaignId, msg.sender);
@@ -465,12 +465,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
             (10000 - campaignSchedule[_campaignId].pctReleased)) / 10000;
 
         if (refundAmount > 0) {
-            // Transfer the funds back to the user
-            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
-
             userDonations[msg.sender][_campaignId].amountPerToken[
                 _payToken
             ] = 0;
+
+            // Transfer the funds back to the user
+            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
         }
 
         emit Refund(_campaignId, msg.sender, refundAmount, _payToken);
@@ -502,12 +502,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
         IERC20 payToken = IERC20(_payToken);
 
         if (refundAmount > 0) {
-            // Transfer the funds back to the user
-            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
-
             userDonations[msg.sender][_campaignId].amountPerToken[
                 _payToken
             ] = 0;
+
+            // Transfer the funds back to the user
+            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
         }
 
         // Claim rewards from the RaisyChef

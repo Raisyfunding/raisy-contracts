@@ -9,7 +9,6 @@ contract MockRaisyChef is RaisyChef {
 
     constructor(
         RaisyToken _Raisy,
-        address _devaddr,
         address _daotreasuryaddr,
         uint256 _rewardPerBlock,
         uint256 _lockDuration,
@@ -17,7 +16,6 @@ contract MockRaisyChef is RaisyChef {
     )
         RaisyChef(
             _Raisy,
-            _devaddr,
             _daotreasuryaddr,
             _rewardPerBlock,
             _lockDuration,

@@ -3,12 +3,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-
-interface IRaisyAddressRegistry {
-    function tokenRegistry() external view returns (address);
-
-    function raisyToken() external view returns (address);
-}
+import "./interfaces/IRaisyAddressRegistry.sol";
 
 interface IRaisyTokenRegistry {
     function enabled(address) external returns (bool);

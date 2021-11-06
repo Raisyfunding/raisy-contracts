@@ -56,8 +56,6 @@ contract RaisyChef is Ownable, ReentrancyGuard {
 
     // The RAISY token
     RaisyToken public Raisy;
-    // Dev address.
-    address public devaddr;
     // DAO Treasury Address
     address public daotreasuryaddr;
     // Total Raisy Staked
@@ -68,8 +66,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     // @notice The block number when RAISY mining starts.
     uint256 public START_BLOCK;
 
-    uint256 public PERCENT_FOR_DEV; // dev bounties
-    uint256 public PERCENT_FOR_DAO; // DAO Treasury
+    uint256 public PERCENT_FOR_DAO = 1; // Rewards for DAO Treasury
 
     // @notice Linear vesting duration on staking rewards
     uint256 public LOCK_DURATION;
@@ -116,14 +113,12 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     /// @param _startBlock Start block of farming
     constructor(
         RaisyToken _Raisy,
-        address _devaddr,
         address _daotreasuryaddr,
         uint256 _rewardPerBlock,
         uint256 _lockDuration,
         uint256 _startBlock
     ) {
         Raisy = _Raisy;
-        devaddr = _devaddr;
         daotreasuryaddr = _daotreasuryaddr;
         REWARD_PER_BLOCK = _rewardPerBlock;
         START_BLOCK = _startBlock;
@@ -292,7 +287,7 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     /// @dev Not a classic harvest function, it is enabled only at the end of the pool farm. Locks a % of reward if it comes from bonus time.
     /// @param _to Address of the farmer who harvests
     /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
-    function _harvest(address _to, uint256 _pid) internal {
+    function _harvest(address _to, uint256 _pid) internal nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 
@@ -327,13 +322,14 @@ contract RaisyChef is Ownable, ReentrancyGuard {
                     rewards = pending;
                 } else {
                     // Transfer rewards determined by the linear vesting ratio
-                    uint256 unlock_pct = _getBlock().sub(pool.endBlock).div(
+                    uint256 unlockPct = _getBlock().sub(pool.endBlock).div(
                         LOCK_DURATION
                     );
-                    rewards = pending.mul(unlock_pct);
+                    rewards = pending.mul(unlockPct);
                 }
 
-                Raisy.transfer(_to, rewards);
+                bool success = Raisy.transfer(_to, rewards);
+                require(success, "Failed to send rewards.");
 
                 emit SendGovernanceTokenReward(_to, _pid, rewards);
             }
@@ -411,13 +407,6 @@ contract RaisyChef is Ownable, ReentrancyGuard {
         );
     }
 
-    /// @notice Update dev address
-    /// @dev Only owner
-    /// @param _devaddr Address of the new owner
-    function dev(address _devaddr) public onlyOwner {
-        devaddr = _devaddr;
-    }
-
     /// @notice Update Address of the DAO treasury
     /// @dev Only administrator
     /// @param _newDaoTreasury New address of the DAO treasury
@@ -437,6 +426,13 @@ contract RaisyChef is Ownable, ReentrancyGuard {
     /// @param _newstarblock New number for the start block
     function starblockUpdate(uint256 _newstarblock) public onlyOwner {
         START_BLOCK = _newstarblock;
+    }
+
+    /// @notice Update PERCENT_FOR_DAO
+    /// @dev Only Administrator
+    /// @param _newDaoRewardsPercent New percentage for DAO treasury
+    function daoRewardsUpdate(uint256 _newDaoRewardsPercent) public onlyOwner {
+        PERCENT_FOR_DAO = _newDaoRewardsPercent;
     }
 
     /// @notice View, gives the current block
