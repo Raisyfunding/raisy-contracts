@@ -37,8 +37,9 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
         from: owner,
       }
     );
-    await this.raisyToken.transferOwnership(this.chef.address);
     await this.chef.add("1", END_BLOCK);
+    await this.chef.deposit(owner, "0", ONE_THOUSAND);
+    await this.raisyToken.transferOwnership(this.chef.address);
   });
   describe("Test views", () => {
     it("Returns poollength", async () => {
@@ -98,9 +99,13 @@ contract("RaisyChef", ([owner, projectowner, daotreasuryadd]) => {
       );
     });
     it("Successfully claims rewards", async () => {
-      await this.chef.setBlockOverride(END_BLOCK + 1);
-      const ownerBalance = new BN(owner.balance);
-      // expect(ownerBalance).to.be.bignumber.greaterThan("1000");
+      await this.chef.setBlockOverride(END_BLOCK + 1000);
+      const _balancee = await this.raisyToken.balanceOf(owner);
+      console.log(_balancee.toString());
+      await this.chef.claimRewards(owner, "0");
+      const _balance = await this.raisyToken.balanceOf(owner);
+      console.log(_balance.toString());
+      expect(_balance).to.be.bignumber.greaterThan(ONE_THOUSAND);
     });
   });
 });
