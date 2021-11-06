@@ -319,14 +319,11 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
                     rewards = pending;
                 } else {
                     // Transfer rewards determined by the linear vesting ratio
-                    uint256 unlockPct = _getBlock().sub(pool.endBlock).div(
-                        lockDuration
-                    );
-                    rewards = pending.mul(unlockPct);
+                    uint256 blocksPassed = _getBlock().sub(pool.endBlock);
+                    rewards = pending.mul(blocksPassed).div(lockDuration);
                 }
 
-                bool success = Raisy.transfer(_to, rewards); //Trusted external call
-                require(success, "Failed to send rewards.");
+                safeRaisyTransfer(_to, rewards);
 
                 emit SendGovernanceTokenReward(_to, _pid, rewards);
             }
