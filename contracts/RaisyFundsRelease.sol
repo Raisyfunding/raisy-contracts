@@ -199,6 +199,8 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Campaign already has a schedule."
         );
 
+        scheduleExistence[_campaignId] = true;
+
         // Add the schedule to the mapping
         campaignSchedule[_campaignId] = Schedule(
             _campaignId,

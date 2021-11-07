@@ -122,7 +122,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
         require(
             allCampaigns[_campaignId].startBlock +
                 allCampaigns[_campaignId].duration >=
-                block.number,
+                _getBlock(),
             "Campaign is over."
         );
         _;
@@ -132,7 +132,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
         require(
             allCampaigns[_campaignId].startBlock +
                 allCampaigns[_campaignId].duration <=
-                block.number,
+                _getBlock(),
             "Campaign is over."
         );
         _;
@@ -180,7 +180,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             msg.sender,
             false,
             _duration,
-            block.number,
+            _getBlock(),
             _amountToRaise,
             0,
             false
@@ -188,7 +188,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         // Add new pool to the RaisyChef
         IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
-        raisyChef.add(campaignId, block.number + _duration);
+        raisyChef.add(campaignId, _getBlock() + _duration);
 
         // Inrease the counter
         _campaignIdCounter.increment();
@@ -201,7 +201,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             campaignId,
             msg.sender,
             _duration,
-            block.number,
+            _getBlock(),
             _amountToRaise,
             false
         );
@@ -226,7 +226,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             msg.sender,
             false,
             _duration,
-            block.number,
+            _getBlock(),
             _amountToRaise,
             0,
             true
@@ -234,7 +234,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         // Add new pool to the RaisyChef
         IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
-        raisyChef.add(campaignId, block.number + _duration);
+        raisyChef.add(campaignId, _getBlock() + _duration);
 
         // Register the schedule
         register(campaignId, _nbMilestones, _pctReleasePerMilestone);
@@ -250,7 +250,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             campaignId,
             msg.sender,
             _duration,
-            block.number,
+            _getBlock(),
             _amountToRaise,
             true
         );
@@ -260,7 +260,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
         uint256 _campaignId,
         uint256 _amount,
         address _payToken
-    ) external isNotOver(_campaignId) exists(_campaignId) nonReentrant {
+    ) external exists(_campaignId) isNotOver(_campaignId) nonReentrant {
         require(_amount > 0, "Donation must be positive.");
 
         _validPayToken(_payToken);
@@ -550,5 +550,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
         }
 
         return (unitPrice, decimals);
+    }
+
+    /// @notice View, gives the current block
+    /// @dev Function to override for the tests (mockRaisyChef)
+    /// @return Current block
+    function _getBlock() internal view virtual returns (uint256) {
+        return block.number;
     }
 }
