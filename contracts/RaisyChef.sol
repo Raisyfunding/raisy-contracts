@@ -50,7 +50,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         uint256 campaignId; // ID of the associated campaign
         uint256 endBlock; // Last block number where RAISY distribution ends.
         uint256 lastRewardBlock; // Last block number that RAISY distribution occurs.
-        uint256 accRaisyPerShare; // Accumulated RAISY per share, times 1e12. See below.
+        uint256 accRaisyPerShare; // Accumulated RAISY per share, times 1e18. See below.
         uint256 amountStaked; // Amount of RAISY staked in the pool
         uint256 daoBonusMultiplier; // Bonus Multiplier which can be set by the Raisy DAO
     }
@@ -177,6 +177,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
     /// @param _pid Id of the pool in the RaisyChef contract (!=campaignId)
     function updatePool(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
+
         if (_getBlock() <= pool.lastRewardBlock) {
             return;
         }
@@ -202,7 +203,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         Raisy.mint(address(this), raisyForFarmer); //Trusted external call
 
         pool.accRaisyPerShare = pool.accRaisyPerShare.add(
-            raisyForFarmer.mul(1e12).div(totalRaisyStaked)
+            raisyForFarmer.mul(1e18).div(totalRaisyStaked)
         );
 
         pool.lastRewardBlock = _getBlock();
@@ -265,11 +266,11 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
                 pool.daoBonusMultiplier
             );
             accRaisyPerShare = accRaisyPerShare.add(
-                raisyForFarmer.mul(1e12).div(totalRaisyStaked)
+                raisyForFarmer.mul(1e18).div(totalRaisyStaked)
             );
         }
 
-        return user.amount.mul(accRaisyPerShare).div(1e12).sub(user.rewardDebt);
+        return user.amount.mul(accRaisyPerShare).div(1e18).sub(user.rewardDebt);
     }
 
     /// @notice claims rewards of the farmer
@@ -298,7 +299,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
             uint256 pending = user
                 .amount
                 .mul(pool.accRaisyPerShare)
-                .div(1e12)
+                .div(1e18)
                 .sub(user.rewardDebt);
 
             // Make sure we aren't giving more tokens than we have in the
@@ -329,7 +330,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
             }
 
             // Recalculate the rewardDebt for the user.
-            user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
+            user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e18);
         }
     }
 
@@ -375,7 +376,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         pool.amountStaked += _amount;
 
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e18);
 
         emit Deposit(_from, _pid, _amount);
     }

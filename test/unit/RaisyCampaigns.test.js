@@ -12,13 +12,13 @@ const { expect } = require("chai");
 
 const RaisyCampaigns = artifacts.require("MockRaisyCampaigns");
 const RaisyToken = artifacts.require("RaisyToken");
-const RaisyChef = artifacts.require("RaisyChef");
+const RaisyChef = artifacts.require("MockRaisyChef");
 const RaisyAddressRegistry = artifacts.require("RaisyAddressRegistry");
 const RaisyTokenRegistry = artifacts.require("RaisyTokenRegistry");
 const RaisyPriceFeed = artifacts.require("RaisyPriceFeed");
 const MockERC20 = artifacts.require("MockERC20");
 
-contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd]) => {
+contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd, user]) => {
 	const AMOUNT_TO_RAISE = new BN(ether("10000"));
 	const MAX_SUPPLY = new BN(ether("10000000"));
 	const REW_PER_BLOCK = new BN("10");
@@ -55,34 +55,39 @@ contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd]) => {
 			{ from: owner }
 		);
 
-		// Mint 1000 $RSY
-		this.raisyToken.mint(owner, ONE_HUNDRED_THOUSAND, { from: owner });
+		// Mint 100000 $RSY
+		await this.raisyToken.mint(owner, ONE_HUNDRED_THOUSAND, { from: owner });
 
 		// Transfer ownerships
-		this.raisyToken.transferOwnership(this.raisyChef.address, { from: owner });
-		this.raisyChef.transferOwnership(this.raisyCampaigns.address, {
+		await this.raisyToken.transferOwnership(this.raisyChef.address, {
+			from: owner,
+		});
+		await this.raisyChef.transferOwnership(this.raisyCampaigns.address, {
 			from: owner,
 		});
 
 		// Setup the Address Registry
-		this.raisyAddressRegistry.updateRaisyChef(this.raisyChef.address, {
+		await this.raisyAddressRegistry.updateRaisyChef(this.raisyChef.address, {
 			from: owner,
 		});
-		this.raisyAddressRegistry.updateRaisyToken(this.raisyToken.address, {
+		await this.raisyAddressRegistry.updateRaisyToken(this.raisyToken.address, {
 			from: owner,
 		});
-		this.raisyAddressRegistry.updateTokenRegistry(
+		await this.raisyAddressRegistry.updateTokenRegistry(
 			this.raisyTokenRegistry.address,
 			{
 				from: owner,
 			}
 		);
-		this.raisyAddressRegistry.updatePriceFeed(this.raisyPriceFeed.address, {
-			from: owner,
-		});
+		await this.raisyAddressRegistry.updatePriceFeed(
+			this.raisyPriceFeed.address,
+			{
+				from: owner,
+			}
+		);
 
 		// Update the Address Registry address
-		this.raisyCampaigns.updateAddressRegistry(
+		await this.raisyCampaigns.updateAddressRegistry(
 			this.raisyAddressRegistry.address,
 			{ from: owner }
 		);
@@ -350,6 +355,226 @@ contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd]) => {
 				amount: "0",
 				payToken: this.raisyToken.address,
 			});
+
+			expect(
+				await this.raisyCampaigns.getAmountDonated(
+					owner,
+					0,
+					this.raisyToken.address
+				)
+			).to.be.bignumber.equal(FIVE_HUNDRED);
+
+			const raisyBalance = await this.raisyToken.balanceOf(
+				this.raisyCampaigns.address
+			);
+
+			console.log(
+				`*There is ${raisyBalance} $RSY on the RaisyCampaigns contract.`
+			);
+			expect(raisyBalance).to.be.bignumber.equal(FIVE_HUNDRED);
+		});
+	});
+
+	describe("claimInitialFunds()", async () => {
+		const ADD_BLOCK = 50;
+		const BLOCK_DURATION = 100;
+
+		const AMOUNT_RAISED = new BN(ether("15000"));
+
+		beforeEach(async () => {
+			await this.raisyCampaigns.setBlockOverride(ADD_BLOCK);
+
+			await this.raisyCampaigns.methods[
+				"addCampaign(uint256,uint256,uint256,uint256[])"
+			](BLOCK_DURATION, AMOUNT_TO_RAISE, new BN("2"), [5000, 5000], {
+				from: projectowner,
+			});
+		});
+
+		it("reverts if the campaign doesn't exist", async () => {
+			await expectRevert(
+				this.raisyCampaigns.claimInitialFunds(1, { from: projectowner }),
+				"Campaign does not exist."
+			);
+		});
+
+		it("reverts if the campaign is not over", async () => {
+			// BLOCK NUMBER = 100 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(BLOCK_DURATION);
+
+			await expectRevert(
+				this.raisyCampaigns.claimInitialFunds(0, { from: projectowner }),
+				"Campaign is not over."
+			);
+		});
+
+		it("reverts if the campaign has not been a success", async () => {
+			// BLOCK NUMBER = 151 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await expectRevert(
+				this.raisyCampaigns.claimInitialFunds(0, { from: projectowner }),
+				"Campaign hasn't been successful."
+			);
+		});
+
+		it("reverts if caller is not the campaign creator", async () => {
+			// BLOCK NUMBER = 151 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await this.raisyCampaigns.updateAmountRaised(0, AMOUNT_RAISED, {
+				from: owner,
+			});
+
+			await expectRevert(
+				this.raisyCampaigns.claimInitialFunds(0, { from: owner }),
+				"You're not the creator ."
+			);
+		});
+
+		it("successfuly claim initial funds", async () => {
+			await this.raisyToken.approve(
+				this.raisyCampaigns.address,
+				AMOUNT_RAISED,
+				{ from: owner }
+			);
+
+			await this.raisyCampaigns.donate(
+				0,
+				AMOUNT_RAISED,
+				this.raisyToken.address,
+				{ from: owner }
+			);
+
+			// BLOCK NUMBER = 151 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await this.raisyCampaigns.updateAmountRaised(0, AMOUNT_RAISED, {
+				from: owner,
+			});
+
+			await this.raisyCampaigns.claimInitialFunds(0, { from: projectowner });
+		});
+	});
+
+	describe("withdrawFunds()", async () => {
+		const ADD_BLOCK = 50;
+		const BLOCK_DURATION = 100;
+
+		const AMOUNT_RAISED = new BN(ether("15000"));
+
+		beforeEach(async () => {
+			// Go to block 50
+			await this.raisyCampaigns.setBlockOverride(ADD_BLOCK);
+			await this.raisyChef.setBlockOverride(ADD_BLOCK);
+
+			// Add the campaign
+			await this.raisyCampaigns.methods[
+				"addCampaign(uint256,uint256,uint256,uint256[])"
+			](BLOCK_DURATION, AMOUNT_TO_RAISE, new BN("2"), [5000, 5000], {
+				from: projectowner,
+			});
+
+			// Approves the contract to use $RSY
+			await this.raisyToken.approve(this.raisyCampaigns.address, FIVE_HUNDRED, {
+				from: owner,
+			});
+
+			// Donate 500 $RSY
+			await this.raisyCampaigns.donate(
+				0,
+				FIVE_HUNDRED,
+				this.raisyToken.address,
+				{ from: owner }
+			);
+		});
+
+		it("reverts if the campaign doesn't exist", async () => {
+			await expectRevert(
+				this.raisyCampaigns.withdrawFunds(1, this.raisyToken.address, {
+					from: owner,
+				}),
+				"Campaign does not exist."
+			);
+		});
+
+		it("reverts if the campaign is not over", async () => {
+			await expectRevert(
+				this.raisyCampaigns.withdrawFunds(0, this.raisyToken.address, {
+					from: owner,
+				}),
+				"Campaign is not over."
+			);
+		});
+
+		it("reverts if the campaign has been successful", async () => {
+			// Go to block 151 -> the campaign is finished
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await this.raisyCampaigns.updateAmountRaised(0, AMOUNT_RAISED, {
+				from: owner,
+			});
+
+			await expectRevert(
+				this.raisyCampaigns.withdrawFunds(0, this.raisyToken.address, {
+					from: owner,
+				}),
+				"Campaign has been successful."
+			);
+		});
+
+		it("reverts if there are no funds to withdraw", async () => {
+			// Go to block 151 -> the campaign is finished
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await expectRevert(
+				this.raisyCampaigns.withdrawFunds(0, this.raisyToken.address, {
+					from: user,
+				}),
+				"No more funds to withdraw."
+			);
+		});
+
+		it("reverts if the pay token is not valid", async () => {
+			// Go to block 151 -> the campaign is finished
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await expectRevert(
+				this.raisyCampaigns.withdrawFunds(0, this.mockERC20.address, {
+					from: owner,
+				}),
+				"invalid pay token"
+			);
+		});
+
+		it("successfuly whithdraws funds", async () => {
+			// Go to block 151 -> the campaign is finished
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+			await this.raisyChef.setBlockOverride(5000);
+
+			const balanceBefore = await this.raisyToken.balanceOf(owner);
+			console.log(`Balance before withdrawing = ${balanceBefore.toString()}`);
+
+			await this.raisyCampaigns.withdrawFunds(0, this.raisyToken.address, {
+				from: owner,
+			});
+
+			const balanceAfter = await this.raisyToken.balanceOf(owner);
+			console.log(`Balance after withdrawing = ${balanceAfter.toString()}`);
 		});
 	});
 });

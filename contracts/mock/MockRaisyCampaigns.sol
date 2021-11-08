@@ -11,6 +11,10 @@ contract MockRaisyCampaigns is RaisyCampaigns {
         blockOverride = _block;
     }
 
+    function updateAmountRaised(uint256 _campaignId, uint256 _amount) external {
+        allCampaigns[_campaignId].amountRaised = _amount;
+    }
+
     function _getBlock() internal view override returns (uint256) {
         return blockOverride;
     }

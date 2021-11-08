@@ -133,7 +133,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             allCampaigns[_campaignId].startBlock +
                 allCampaigns[_campaignId].duration <=
                 _getBlock(),
-            "Campaign is over."
+            "Campaign is not over."
         );
         _;
     }
@@ -339,12 +339,6 @@ contract RaisyCampaigns is RaisyFundsRelease {
         nonReentrant
     {
         require(
-            campaignFundsClaimed[_campaignId] <
-                allCampaigns[_campaignId].amountRaised,
-            "No more funds to claim."
-        );
-
-        require(
             !allCampaigns[_campaignId].isOver,
             "Initial funds already claimed."
         );
@@ -360,6 +354,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             campaignFundsClaimed[_campaignId] += toReleaseAmount;
 
             // Transfer the funds to the campaign's creator
+            payToken.safeIncreaseAllowance(address(this), toReleaseAmount);
             payToken.safeTransferFrom(
                 address(this),
                 msg.sender,
@@ -370,9 +365,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
                 .amountRaised;
 
             // Transfer the funds to the campaign's creator
-
-            payToken.safeTransferFrom(
-                address(this),
+            payToken.safeTransfer(
                 msg.sender,
                 allCampaigns[_campaignId].amountRaised
             );
@@ -413,7 +406,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
         campaignFundsClaimed[_campaignId] += toReleaseAmount;
 
         // Transfer the funds to the campaign's creator
-        payToken.safeTransferFrom(address(this), msg.sender, toReleaseAmount);
+        payToken.safeTransfer(msg.sender, toReleaseAmount);
 
         // Emit the claim event
         emit FundsClaimed(_campaignId, msg.sender);
@@ -470,7 +463,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             ] = 0;
 
             // Transfer the funds back to the user
-            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
+            payToken.safeTransfer(msg.sender, refundAmount);
         }
 
         emit Refund(_campaignId, msg.sender, refundAmount, _payToken);
@@ -488,13 +481,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
                 allCampaigns[_campaignId].amountToRaise,
             "Campaign has been successful."
         );
+        _validPayToken(_payToken);
         require(
             userDonations[msg.sender][_campaignId].amountPerToken[_payToken] >
                 0,
             "No more funds to withdraw."
         );
-
-        _validPayToken(_payToken);
 
         uint256 refundAmount = userDonations[msg.sender][_campaignId]
             .amountPerToken[_payToken];
@@ -507,7 +499,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             ] = 0;
 
             // Transfer the funds back to the user
-            payToken.safeTransferFrom(address(this), msg.sender, refundAmount);
+            payToken.safeTransfer(msg.sender, refundAmount);
         }
 
         // Claim rewards from the RaisyChef
@@ -516,6 +508,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         emit WithdrawFunds(_campaignId, msg.sender, refundAmount, _payToken);
     }
+
+    ///
+    /// INTERNAL & VIEW FUNCTIONS
+    ///
 
     function _validPayToken(address _payToken) internal view {
         require(
@@ -557,5 +553,13 @@ contract RaisyCampaigns is RaisyFundsRelease {
     /// @return Current block
     function _getBlock() internal view virtual returns (uint256) {
         return block.number;
+    }
+
+    function getAmountDonated(
+        address _donor,
+        uint256 _campaignId,
+        address _payToken
+    ) external view returns (uint256) {
+        return userDonations[_donor][_campaignId].amountPerToken[_payToken];
     }
 }
