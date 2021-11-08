@@ -2,37 +2,10 @@
 
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IRaisyAddressRegistry.sol";
-
-interface IRaisyNFT {
-    struct DonationInfo {
-        uint256 amount;
-        address tokenUsed;
-        uint256 campaignId;
-        address recipient;
-        uint256 creationTimestamp;
-    }
-
-    function balanceOf(address) external view returns (uint256);
-
-    function getDonationInfo(uint256)
-        external
-        view
-        returns (DonationInfo memory);
-
-    function tokenOfOwnerByIndex(address, uint256)
-        external
-        view
-        returns (uint256);
-
-    function mint(DonationInfo calldata) external returns (uint256);
-}
+import "./RaisyFundsRelease.sol";
 
 interface IRaisyChef {
     function add(uint256, uint256) external;
@@ -44,33 +17,6 @@ interface IRaisyChef {
     ) external;
 
     function claimRewards(address, uint256) external;
-}
-
-interface IRaisyFundsRelease {
-    function getStage(uint256) external view returns (uint256);
-
-    function endVoteSession(uint256) external returns (bool);
-
-    function increaseNbDonors(uint256) external;
-
-    function raisysetClaimPod(uint256, address) external;
-
-    function getNextFunds(uint256) external view returns (uint256);
-
-    function register(
-        uint256,
-        uint256,
-        uint256[] calldata
-    ) external;
-
-    function initializeVoteSession(uint256) external;
-
-    function getNextPctFunds(uint256) external view returns (uint256);
-
-    function getHasProofOfDonation(uint256, address)
-        external
-        view
-        returns (bool);
 }
 
 interface IRaisyPriceFeed {
@@ -88,12 +34,10 @@ interface IAgoraTokenRegistry {
 /// @notice Main Contract handling the campaigns' creation and donations
 /// @dev Inherits of upgradeable versions of OZ libraries
 /// interacts with the AddressRegistry / RaisyNFTFactory / RaisyFundsRelease
-contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract RaisyCampaigns is RaisyFundsRelease {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     using AddressUpgradeable for address payable;
     using SafeERC20 for IERC20;
-
-    event AddressRegistryUpdated(address indexed newAddressRegistry);
 
     /// @notice Events for the contract
     event CampaignCreated(
@@ -160,9 +104,6 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// @notice Latest campaign ID
     CountersUpgradeable.Counter private _campaignIdCounter;
-
-    /// @notice Address registry
-    IRaisyAddressRegistry public addressRegistry;
 
     /// @notice Campaign ID -> Campaign
     mapping(uint256 => Campaign) public allCampaigns;
@@ -296,14 +237,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         raisyChef.add(campaignId, _getBlock() + _duration);
 
         // Register the schedule
-        IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-            addressRegistry.raisyFundsRelease()
-        );
-        raisyFundsRelease.register(
-            campaignId,
-            _nbMilestones,
-            _pctReleasePerMilestone
-        );
+        register(campaignId, _nbMilestones, _pctReleasePerMilestone);
 
         // Inrease the counter
         _campaignIdCounter.increment();
@@ -353,11 +287,8 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         allCampaigns[_campaignId].amountRaised += amountInUSD;
 
         // If it's the first time the user is donating increment the number of donors
-        IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-            addressRegistry.raisyFundsRelease()
-        );
         if (userDonations[msg.sender][_campaignId].amountInUSD == 0)
-            raisyFundsRelease.increaseNbDonors(_campaignId);
+            nbDonors[_campaignId]++;
 
         userDonations[msg.sender][_campaignId].amountPerToken[
             _payToken
@@ -373,18 +304,12 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         exists(_campaignId)
         nonReentrant
     {
-        IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-            addressRegistry.raisyFundsRelease()
-        );
         require(allCampaigns[_campaignId].isOver, "Campaign is not over.");
         require(
             userDonations[msg.sender][_campaignId].amountInUSD > 0,
             "No PoD to claim."
         );
-        require(
-            raisyFundsRelease.getHasProofOfDonation(_campaignId, msg.sender),
-            "PoD already claimed."
-        );
+        require(!podClaimed[_campaignId][msg.sender], "PoD already claimed.");
 
         // Mint Raisy NFT
         IRaisyNFT raisyNFT = IRaisyNFT(addressRegistry.raisyNFT());
@@ -399,7 +324,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         uint256 tokenId = raisyNFT.mint(donationInfo);
 
-        raisyFundsRelease.raisysetClaimPod(_campaignId, msg.sender);
+        podClaimed[_campaignId][msg.sender] = true;
 
         // Emit the claim event
         emit ProofOfDonationClaimed(_campaignId, msg.sender, tokenId);
@@ -428,12 +353,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         if (allCampaigns[_campaignId].hasReleaseSchedule) {
             // Trigger state change on RaisyFundsRelease
-            IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-                addressRegistry.raisyFundsRelease()
-            );
-            uint256 toReleasePct = raisyFundsRelease.getNextPctFunds(
-                _campaignId
-            );
+            uint256 toReleasePct = getNextPctFunds(_campaignId);
             uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
                 toReleasePct) / 10000;
 
@@ -475,24 +395,18 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         onlyCreator(_campaignId)
         nonReentrant
     {
-        IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-            addressRegistry.raisyFundsRelease()
-        );
         require(
             campaignFundsClaimed[_campaignId] <
                 allCampaigns[_campaignId].amountRaised,
             "No more funds to claim."
         );
         require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
-        require(
-            raisyFundsRelease.endVoteSession(_campaignId),
-            "Vote didn't pass."
-        );
+        require(endVoteSession(_campaignId), "Vote didn't pass.");
 
         IERC20 payToken = IERC20(addressRegistry.raisyToken());
 
         // Trigger state change on RaisyFundsRelease
-        uint256 toReleasePct = raisyFundsRelease.getNextPctFunds(_campaignId);
+        uint256 toReleasePct = getNextPctFunds(_campaignId);
         uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
             toReleasePct) / 10000;
 
@@ -522,11 +436,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
         require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
 
-        IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-            addressRegistry.raisyFundsRelease()
-        );
-
-        raisyFundsRelease.initializeVoteSession(_campaignId);
+        initializeVoteSession(_campaignId);
 
         emit MoreFundsAsked(_campaignId, msg.sender);
     }
@@ -536,19 +446,10 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         exists(_campaignId)
         isOver(_campaignId)
         isSuccess(_campaignId)
+        atStage(_campaignId, Stages.Refund)
+        hasProofOfDonation(_campaignId)
         nonReentrant
     {
-        IRaisyFundsRelease raisyFundsRelease = IRaisyFundsRelease(
-            addressRegistry.raisyFundsRelease()
-        );
-        require(
-            raisyFundsRelease.getStage(_campaignId) == 3,
-            "Refund not voted"
-        );
-        require(
-            raisyFundsRelease.getHasProofOfDonation(_campaignId, msg.sender),
-            "Doesn't have POD."
-        );
         require(
             userDonations[msg.sender][_campaignId].amountPerToken[_payToken] >
                 0,
@@ -561,7 +462,7 @@ contract RaisyCampaigns is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         uint256 refundAmount = (userDonations[msg.sender][_campaignId]
             .amountPerToken[_payToken] *
-            (10000 - raisyFundsRelease.getNextFunds(_campaignId))) / 10000;
+            (10000 - campaignSchedule[_campaignId].pctReleased)) / 10000;
 
         if (refundAmount > 0) {
             userDonations[msg.sender][_campaignId].amountPerToken[

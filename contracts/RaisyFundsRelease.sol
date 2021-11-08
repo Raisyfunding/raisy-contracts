@@ -391,41 +391,4 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         emit VoteSessionDurationUpdated(_duration);
     }
-
-    /// @notice View, returns the stage of the campaign
-    /// @dev Used in RaisyCampaigns to give funds back to users
-    /// @param _campaignId Id of the campaign
-    /// @return releaseStage The stage of the campaign
-    function getStage(uint256 _campaignId) external view returns (uint256) {
-        return uint256(campaignSchedule[_campaignId].releaseStage);
-    }
-
-    /// @notice View, returns true if the address has a proof of donation
-    /// @dev Used in RaisyCampaigns
-    /// @param _campaignId Id of the campaign
-    /// @param _funder Address of the funder
-    /// @return podClaimed True if the user has pod
-
-    function getHasProofOfDonation(uint256 _campaignId, address _funder)
-        external
-        view
-        returns (bool)
-    {
-        return podClaimed[_campaignId][_funder];
-    }
-
-    function setClaimPod(uint256 _campaignId, address _funder)
-        public
-        onlyOwner
-    {
-        podClaimed[_campaignId][_funder] = true;
-    }
-
-    function increaseNbDonors(uint256 _campaignId) external onlyOwner {
-        nbDonors[_campaignId]++;
-    }
-
-    function getNextFunds(uint256 _campaignId) external view returns (uint256) {
-        return campaignSchedule[_campaignId].pctReleased;
-    }
 }
