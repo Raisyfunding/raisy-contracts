@@ -32,14 +32,12 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
 
     event Minted(uint256 tokenId, DonationInfo param);
 
-    uint256 private _currentTokenId = 0;
-
     constructor(string memory _name, string memory _symbol)
         ERC721(_name, _symbol)
     {}
 
     /**
-     * @dev Mints a token to an address with a tokenURI.
+     * @dev Mints a new Proof Of Donation
      */
 
     function mint(DonationInfo calldata params)

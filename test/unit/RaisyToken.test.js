@@ -8,7 +8,6 @@ const {
 	balance,
 	ether,
 } = require("@openzeppelin/test-helpers");
-const { chef } = require("./RaisyChef_unit_test");
 
 const RaisyToken = artifacts.require("RaisyToken");
 
