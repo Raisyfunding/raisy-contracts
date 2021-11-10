@@ -267,7 +267,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         VoteSession storage _voteSession = voteSession[_campaignId];
 
         _voteSession.inProgress = true;
-        _voteSession.startBlock = block.number;
+        _voteSession.startBlock = _getBlock();
         _voteSession.voteRatio = 0;
         _voteSession.numUnsuccessfulVotes = 0;
 
@@ -294,7 +294,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Can only vote once."
         );
         require(
-            block.number <
+            _getBlock() <
                 voteSession[_campaignId].startBlock + VOTE_SESSION_DURATION,
             "Vote session finished."
         );
@@ -325,7 +325,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "Vote session not in progress."
         );
         require(
-            block.number >=
+            _getBlock() >=
                 voteSession[_campaignId].startBlock + VOTE_SESSION_DURATION,
             "Vote session not ended."
         );
@@ -390,5 +390,12 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         VOTE_SESSION_DURATION = _duration;
 
         emit VoteSessionDurationUpdated(_duration);
+    }
+
+    /// @notice View, gives the current block
+    /// @dev Function to override for the tests (mockRaisyChef)
+    /// @return Current block
+    function _getBlock() internal view virtual returns (uint256) {
+        return block.number;
     }
 }

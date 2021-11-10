@@ -25,8 +25,10 @@ interface IRaisyPriceFeed {
     function getPrice(address) external view returns (int256, uint8);
 }
 
-interface IAgoraTokenRegistry {
+interface IRaisyTokenRegistry {
     function enabled(address) external view returns (bool);
+
+    function getEnabledTokens() external view returns (address[] memory);
 }
 
 /// @title Main Smart Contract of the architecture
@@ -84,11 +86,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
     struct Campaign {
         uint256 id; // ID of the campaign automatically set by the counter
         address creator; // Creator of the campaign
-        bool isOver;
         uint256 duration;
         uint256 startBlock;
         uint256 amountToRaise; // IN USD w/ 18 decimals e.g 25 USD = 25 * 10 ** 18
         uint256 amountRaised; // IN USD w/ 18 decimals e.g 25 USD = 25 * 10 ** 18
+        mapping(address => uint256) amountRaisedPerToken;
+        bool isOver;
         bool hasReleaseSchedule;
     }
 
@@ -175,16 +178,16 @@ contract RaisyCampaigns is RaisyFundsRelease {
         uint256 campaignId = _campaignIdCounter.current();
 
         // Add a new campaign to the mapping
-        allCampaigns[campaignId] = Campaign(
-            campaignId,
-            msg.sender,
-            false,
-            _duration,
-            _getBlock(),
-            _amountToRaise,
-            0,
-            false
-        );
+        Campaign storage campaign = allCampaigns[campaignId];
+
+        campaign.id = campaignId;
+        campaign.creator = msg.sender;
+        campaign.amountToRaise = _amountToRaise;
+        campaign.isOver = false;
+        campaign.hasReleaseSchedule = false;
+        campaign.duration = _duration;
+        campaign.amountRaised = 0;
+        campaign.startBlock = _getBlock();
 
         // Add new pool to the RaisyChef
         IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
@@ -221,16 +224,16 @@ contract RaisyCampaigns is RaisyFundsRelease {
         uint256 campaignId = _campaignIdCounter.current();
 
         // Add a new campaign to the mapping
-        allCampaigns[campaignId] = Campaign(
-            campaignId,
-            msg.sender,
-            false,
-            _duration,
-            _getBlock(),
-            _amountToRaise,
-            0,
-            true
-        );
+        Campaign storage campaign = allCampaigns[campaignId];
+
+        campaign.id = campaignId;
+        campaign.creator = msg.sender;
+        campaign.amountToRaise = _amountToRaise;
+        campaign.isOver = false;
+        campaign.hasReleaseSchedule = true;
+        campaign.duration = _duration;
+        campaign.amountRaised = 0;
+        campaign.startBlock = _getBlock();
 
         // Add new pool to the RaisyChef
         IRaisyChef raisyChef = IRaisyChef(addressRegistry.raisyChef());
@@ -286,6 +289,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         allCampaigns[_campaignId].amountRaised += amountInUSD;
 
+        allCampaigns[_campaignId].amountRaisedPerToken[_payToken] += _amount;
+
         // If it's the first time the user is donating increment the number of donors
         if (userDonations[msg.sender][_campaignId].amountInUSD == 0)
             nbDonors[_campaignId]++;
@@ -305,10 +310,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
         nonReentrant
     {
         require(allCampaigns[_campaignId].isOver, "Campaign is not over.");
-        require(
-            userDonations[msg.sender][_campaignId].amountInUSD > 0,
-            "No PoD to claim."
-        );
+        // require(
+        //     userDonations[msg.sender][_campaignId].amountInUSD > 0,
+        //     "No PoD to claim."
+        // );
         require(!podClaimed[_campaignId][msg.sender], "PoD already claimed.");
 
         // Mint Raisy NFT
@@ -343,32 +348,44 @@ contract RaisyCampaigns is RaisyFundsRelease {
             "Initial funds already claimed."
         );
 
-        IERC20 payToken = IERC20(addressRegistry.raisyToken());
+        IRaisyTokenRegistry tokenRegistry = IRaisyTokenRegistry(
+            addressRegistry.tokenRegistry()
+        );
+        address[] memory enabledTokens = tokenRegistry.getEnabledTokens();
 
         if (allCampaigns[_campaignId].hasReleaseSchedule) {
             // Trigger state change on RaisyFundsRelease
             uint256 toReleasePct = getNextPctFunds(_campaignId);
-            uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
-                toReleasePct) / 10000;
 
-            campaignFundsClaimed[_campaignId] += toReleaseAmount;
+            for (uint256 index = 0; index < enabledTokens.length; index++) {
+                IERC20 payToken = IERC20(enabledTokens[index]);
 
-            // Transfer the funds to the campaign's creator
-            payToken.safeIncreaseAllowance(address(this), toReleaseAmount);
-            payToken.safeTransferFrom(
-                address(this),
-                msg.sender,
-                toReleaseAmount
-            );
+                uint256 toReleaseAmount = (allCampaigns[_campaignId]
+                    .amountRaisedPerToken[enabledTokens[index]] *
+                    toReleasePct) / 10000;
+
+                // Transfer the funds to the campaign's creator
+                payToken.safeTransfer(msg.sender, toReleaseAmount);
+            }
+
+            uint256 toReleaseAmountUSD = (allCampaigns[_campaignId]
+                .amountRaised * toReleasePct) / 10000;
+            campaignFundsClaimed[_campaignId] += toReleaseAmountUSD;
         } else {
             campaignFundsClaimed[_campaignId] += allCampaigns[_campaignId]
                 .amountRaised;
 
-            // Transfer the funds to the campaign's creator
-            payToken.safeTransfer(
-                msg.sender,
-                allCampaigns[_campaignId].amountRaised
-            );
+            for (uint256 index = 0; index < enabledTokens.length; index++) {
+                IERC20 payToken = IERC20(enabledTokens[index]);
+
+                // Transfer the funds to the campaign's creator
+                payToken.safeTransfer(
+                    msg.sender,
+                    allCampaigns[_campaignId].amountRaisedPerToken[
+                        enabledTokens[index]
+                    ]
+                );
+            }
         }
 
         // Enable Proof of Donation
@@ -396,17 +413,28 @@ contract RaisyCampaigns is RaisyFundsRelease {
         require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
         require(endVoteSession(_campaignId), "Vote didn't pass.");
 
-        IERC20 payToken = IERC20(addressRegistry.raisyToken());
+        IRaisyTokenRegistry tokenRegistry = IRaisyTokenRegistry(
+            addressRegistry.tokenRegistry()
+        );
+        address[] memory enabledTokens = tokenRegistry.getEnabledTokens();
 
         // Trigger state change on RaisyFundsRelease
         uint256 toReleasePct = getNextPctFunds(_campaignId);
-        uint256 toReleaseAmount = (allCampaigns[_campaignId].amountRaised *
-            toReleasePct) / 10000;
 
-        campaignFundsClaimed[_campaignId] += toReleaseAmount;
+        for (uint256 index = 0; index < enabledTokens.length; index++) {
+            IERC20 payToken = IERC20(enabledTokens[index]);
 
-        // Transfer the funds to the campaign's creator
-        payToken.safeTransfer(msg.sender, toReleaseAmount);
+            uint256 toReleaseAmount = (allCampaigns[_campaignId]
+                .amountRaisedPerToken[enabledTokens[index]] * toReleasePct) /
+                10000;
+
+            // Transfer the funds to the campaign's creator
+            payToken.safeTransfer(msg.sender, toReleaseAmount);
+        }
+
+        campaignFundsClaimed[_campaignId] +=
+            (allCampaigns[_campaignId].amountRaised * toReleasePct) /
+            10000;
 
         // Emit the claim event
         emit FundsClaimed(_campaignId, msg.sender);
@@ -513,11 +541,15 @@ contract RaisyCampaigns is RaisyFundsRelease {
     /// INTERNAL & VIEW FUNCTIONS
     ///
 
+    // function _sendPayToken(address _to, uint256 _amount, address _payToken) internal {
+
+    // }
+
     function _validPayToken(address _payToken) internal view {
         require(
             _payToken == address(0) ||
                 (addressRegistry.tokenRegistry() != address(0) &&
-                    IAgoraTokenRegistry(addressRegistry.tokenRegistry())
+                    IRaisyTokenRegistry(addressRegistry.tokenRegistry())
                         .enabled(_payToken)),
             "invalid pay token"
         );
@@ -546,13 +578,6 @@ contract RaisyCampaigns is RaisyFundsRelease {
         }
 
         return (unitPrice, decimals);
-    }
-
-    /// @notice View, gives the current block
-    /// @dev Function to override for the tests (mockRaisyChef)
-    /// @return Current block
-    function _getBlock() internal view virtual returns (uint256) {
-        return block.number;
     }
 
     function getAmountDonated(

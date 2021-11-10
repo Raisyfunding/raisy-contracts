@@ -20,6 +20,9 @@ contract RaisyAddressRegistry is Ownable {
     /// @notice RaisyCampaigns contract
     address public raisyCampaigns;
 
+    /// @notice RaisyNFT contract
+    address public raisyNFT;
+
     /**
      @notice Update token registry contract
      @dev Only admin
@@ -58,5 +61,13 @@ contract RaisyAddressRegistry is Ownable {
      */
     function updateRaisyCampaigns(address _raisyCampaigns) external onlyOwner {
         raisyCampaigns = _raisyCampaigns;
+    }
+
+    /**
+     @notice Update raisy NFT contract
+     @dev Only admin
+     */
+    function updateRaisyNFT(address _raisyNFT) external onlyOwner {
+        raisyNFT = _raisyNFT;
     }
 }

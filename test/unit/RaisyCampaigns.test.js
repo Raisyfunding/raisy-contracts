@@ -12,6 +12,7 @@ const { expect } = require("chai");
 
 const RaisyCampaigns = artifacts.require("MockRaisyCampaigns");
 const RaisyToken = artifacts.require("RaisyToken");
+const RaisyNFT = artifacts.require("RaisyNFT");
 const RaisyChef = artifacts.require("MockRaisyChef");
 const RaisyAddressRegistry = artifacts.require("RaisyAddressRegistry");
 const RaisyTokenRegistry = artifacts.require("RaisyTokenRegistry");
@@ -32,6 +33,8 @@ contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd, user]) => {
 		// Deploy the contracts
 		this.raisyCampaigns = await RaisyCampaigns.new({ from: owner });
 		this.raisyCampaigns.initialize({ from: owner });
+
+		this.raisyNFT = await RaisyNFT.new("RaisyNFT", "POD", { from: owner });
 
 		this.raisyToken = await RaisyToken.new("RaisyToken", "RSY", MAX_SUPPLY, {
 			from: owner,
@@ -65,12 +68,18 @@ contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd, user]) => {
 		await this.raisyChef.transferOwnership(this.raisyCampaigns.address, {
 			from: owner,
 		});
+		await this.raisyNFT.transferOwnership(this.raisyCampaigns.address, {
+			from: owner,
+		});
 
 		// Setup the Address Registry
 		await this.raisyAddressRegistry.updateRaisyChef(this.raisyChef.address, {
 			from: owner,
 		});
 		await this.raisyAddressRegistry.updateRaisyToken(this.raisyToken.address, {
+			from: owner,
+		});
+		await this.raisyAddressRegistry.updateRaisyNFT(this.raisyNFT.address, {
 			from: owner,
 		});
 		await this.raisyAddressRegistry.updateTokenRegistry(
@@ -459,7 +468,14 @@ contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd, user]) => {
 				from: owner,
 			});
 
+			const balanceBefore = await this.raisyToken.balanceOf(projectowner);
 			await this.raisyCampaigns.claimInitialFunds(0, { from: projectowner });
+			const balanceAfter = await this.raisyToken.balanceOf(projectowner);
+
+			console.log("Balance before claim : ", balanceBefore.toString());
+			console.log("Balance after claim : ", balanceAfter.toString());
+
+			expect(balanceAfter).to.be.bignumber.equal(ether("7500"));
 		});
 	});
 
@@ -575,6 +591,125 @@ contract("RaisyCampaigns", ([owner, projectowner, daotreasuryadd, user]) => {
 
 			const balanceAfter = await this.raisyToken.balanceOf(owner);
 			console.log(`Balance after withdrawing = ${balanceAfter.toString()}`);
+		});
+	});
+
+	describe("claimNextFunds()", async () => {
+		const ADD_BLOCK = 50;
+		const BLOCK_DURATION = 100;
+
+		const AMOUNT_RAISED = new BN(ether("15000"));
+
+		const claimInitialFunds = async () => {
+			await this.raisyToken.approve(
+				this.raisyCampaigns.address,
+				AMOUNT_RAISED,
+				{ from: owner }
+			);
+
+			await this.raisyCampaigns.donate(
+				0,
+				AMOUNT_RAISED,
+				this.raisyToken.address,
+				{ from: owner }
+			);
+
+			// BLOCK NUMBER = 151 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await this.raisyCampaigns.updateAmountRaised(0, AMOUNT_RAISED, {
+				from: owner,
+			});
+
+			await this.raisyCampaigns.claimInitialFunds(0, { from: projectowner });
+		};
+
+		beforeEach(async () => {
+			await this.raisyCampaigns.setBlockOverride(ADD_BLOCK);
+
+			await this.raisyCampaigns.methods[
+				"addCampaign(uint256,uint256,uint256,uint256[])"
+			](BLOCK_DURATION, AMOUNT_TO_RAISE, new BN("2"), [5000, 5000], {
+				from: projectowner,
+			});
+		});
+
+		it("reverts if the campaign doesn't exist", async () => {
+			await expectRevert(
+				this.raisyCampaigns.claimNextFunds(1, { from: projectowner }),
+				"Campaign does not exist."
+			);
+		});
+
+		it("reverts if the campaign is not over", async () => {
+			// BLOCK NUMBER = 100 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(BLOCK_DURATION);
+
+			await expectRevert(
+				this.raisyCampaigns.claimNextFunds(0, { from: projectowner }),
+				"Campaign is not over."
+			);
+		});
+
+		it("reverts if the campaign has not been a success", async () => {
+			// BLOCK NUMBER = 151 AND ENB BLOCK = 150
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await expectRevert(
+				this.raisyCampaigns.claimNextFunds(0, { from: projectowner }),
+				"Campaign hasn't been successful."
+			);
+		});
+
+		// TODO
+		// it("reverts if there isn't anymore funds to claim", async () => {
+
+		// })
+
+		it("reverts if the initial funds haven't been claimed", async () => {
+			await this.raisyCampaigns.setBlockOverride(
+				ADD_BLOCK + BLOCK_DURATION + 1
+			);
+
+			await this.raisyCampaigns.updateAmountRaised(0, AMOUNT_RAISED, {
+				from: owner,
+			});
+
+			await expectRevert(
+				this.raisyCampaigns.claimNextFunds(0, { from: projectowner }),
+				"Initial funds not claimed."
+			);
+		});
+
+		it("successfuly claims next funds", async () => {
+			await claimInitialFunds();
+
+			// Init vote session
+			await this.raisyCampaigns.askMoreFunds(0, { from: projectowner });
+
+			// Claim PoD
+			await this.raisyCampaigns.claimProofOfDonation(0, { from: owner });
+
+			// Vote YES
+			await this.raisyCampaigns.vote(0, true, { from: owner });
+
+			// Claim Next Funds
+			// BLOCK NUMBER = 151 + 84200 +1  AND ENB BLOCK = 151+84200
+			await this.raisyCampaigns.setBlockOverride(151 + 84200 + 1);
+			const balanceBefore = await this.raisyToken.balanceOf(projectowner);
+			await this.raisyCampaigns.claimNextFunds(0, { from: projectowner });
+			const balanceAfter = await this.raisyToken.balanceOf(projectowner);
+
+			console.log(
+				"Balance before claim next funds : ",
+				balanceBefore.toString()
+			);
+			console.log("Balance after claim next funds : ", balanceAfter.toString());
+			expect(balanceAfter).to.be.bignumber.equal(ether("15000"));
 		});
 	});
 });
