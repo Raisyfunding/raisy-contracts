@@ -82,8 +82,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 startBlock;
         int256 voteRatio;
         bool inProgress;
-        uint8 numUnsuccessfulVotes;
-        mapping(address => bool) hasVoted;
+        uint8 numUnsuccessfulVotes;     
     }
 
     /// @notice Campaign ID -> Schedule
@@ -94,6 +93,9 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// @notice Campaign ID -> Vote Session
     mapping(uint256 => VoteSession) public voteSession;
+
+    /// @notice Campaign ID -> address -> bool
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
 
     /// @notice Campaign ID -> user -> wants refund
     mapping(uint256 => mapping(address => bool)) public refundVotes;
@@ -290,7 +292,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "No vote session in progress."
         );
         require(
-            !voteSession[_campaignId].hasVoted[msg.sender],
+            !hasVoted[_campaignId][msg.sender],
             "Can only vote once."
         );
         require(
@@ -302,7 +304,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (_vote) voteSession[_campaignId].voteRatio++;
         else voteSession[_campaignId].voteRatio--;
 
-        voteSession[_campaignId].hasVoted[msg.sender] = true;
+        hasVoted[_campaignId][msg.sender] = true;
 
         emit NewVote(
             _campaignId,

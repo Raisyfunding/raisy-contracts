@@ -5,9 +5,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IRaisyAddressRegistry.sol";
 
-interface IRaisyTokenRegistry {
-    function enabled(address) external returns (bool);
-}
+import "./interfaces/IRaisyTokenRegistry.sol";
 
 interface IOracle {
     function decimals() external view returns (uint8);

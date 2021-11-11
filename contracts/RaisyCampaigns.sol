@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./RaisyFundsRelease.sol";
+import "./interfaces/IRaisyTokenRegistry.sol";
 
 interface IRaisyChef {
     function add(uint256, uint256) external;
@@ -23,12 +24,6 @@ interface IRaisyPriceFeed {
     function wAVAX() external view returns (address);
 
     function getPrice(address) external view returns (int256, uint8);
-}
-
-interface IRaisyTokenRegistry {
-    function enabled(address) external view returns (bool);
-
-    function getEnabledTokens() external view returns (address[] memory);
 }
 
 /// @title Main Smart Contract of the architecture
