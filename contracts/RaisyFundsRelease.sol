@@ -79,10 +79,11 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /// @notice Vote Structure
     struct VoteSession {
+        uint256 id;
         uint256 startBlock;
         int256 voteRatio;
         bool inProgress;
-        uint8 numUnsuccessfulVotes;     
+        uint8 numUnsuccessfulVotes;
     }
 
     /// @notice Campaign ID -> Schedule
@@ -94,8 +95,9 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     /// @notice Campaign ID -> Vote Session
     mapping(uint256 => VoteSession) public voteSession;
 
-    /// @notice Campaign ID -> address -> bool
-    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    /// @notice Campaign ID -> VoteSession ID -> address -> bool
+    mapping(uint256 => mapping(uint256 => mapping(address => bool)))
+        public hasVoted;
 
     /// @notice Campaign ID -> user -> wants refund
     mapping(uint256 => mapping(address => bool)) public refundVotes;
@@ -292,7 +294,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             "No vote session in progress."
         );
         require(
-            !hasVoted[_campaignId][msg.sender],
+            !hasVoted[_campaignId][voteSession[_campaignId].id][msg.sender],
             "Can only vote once."
         );
         require(
@@ -304,7 +306,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (_vote) voteSession[_campaignId].voteRatio++;
         else voteSession[_campaignId].voteRatio--;
 
-        hasVoted[_campaignId][msg.sender] = true;
+        hasVoted[_campaignId][voteSession[_campaignId].id][msg.sender] = true;
 
         emit NewVote(
             _campaignId,
@@ -333,16 +335,15 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
 
         voteSession[_campaignId].inProgress = false;
+        voteSession[_campaignId].id++;
 
         if (voteSession[_campaignId].voteRatio >= 0) {
             voteSession[_campaignId].numUnsuccessfulVotes = 0;
-            delete voteSession[_campaignId];
             return true;
         } else {
             voteSession[_campaignId].numUnsuccessfulVotes++;
             if (voteSession[_campaignId].numUnsuccessfulVotes == 3) {
                 campaignSchedule[_campaignId].releaseStage = Stages.Refund;
-                delete voteSession[_campaignId];
             }
             return false;
         }
