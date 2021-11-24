@@ -14,4 +14,6 @@ interface IRaisyAddressRegistry {
     function raisyToken() external view returns (address);
 
     function raisyCampaigns() external view returns (address);
+
+    function feeAddress() external view returns (address);
 }

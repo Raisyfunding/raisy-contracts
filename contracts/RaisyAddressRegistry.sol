@@ -23,6 +23,9 @@ contract RaisyAddressRegistry is Ownable {
     /// @notice RaisyNFT contract
     address public raisyNFT;
 
+    /// @notice Fee Address
+    address public feeAddress;
+
     /**
      @notice Update token registry contract
      @dev Only admin
@@ -69,5 +72,13 @@ contract RaisyAddressRegistry is Ownable {
      */
     function updateRaisyNFT(address _raisyNFT) external onlyOwner {
         raisyNFT = _raisyNFT;
+    }
+
+    /**
+     @notice Update fee Address
+     @dev Only admin
+     */
+    function updateFeeAddress(address _feeAddress) external onlyOwner {
+        feeAddress = _feeAddress;
     }
 }

@@ -61,6 +61,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     event FundsClaimed(uint256 campaignId, address indexed creator);
 
+    event PlatformFeeUpdated(uint256 platformFee);
+
     event Refund(
         uint256 campaignId,
         address indexed user,
@@ -99,6 +101,9 @@ contract RaisyCampaigns is RaisyFundsRelease {
     /// @notice Maximum and Minimum campaigns' duration
     uint256 public maxDuration = 200;
     uint256 public minDuration = 20;
+
+    // @notice Platform Fee
+    uint256 public platformFee = 250;
 
     /// @notice Latest campaign ID
     CountersUpgradeable.Counter private _campaignIdCounter;
@@ -359,8 +364,14 @@ contract RaisyCampaigns is RaisyFundsRelease {
                     .amountRaisedPerToken[enabledTokens[index]] *
                     toReleasePct) / 10000;
 
+                uint256 _fee = (toReleaseAmount * platformFee) / 100;
+                address _feeAddress = addressRegistry.feeAddress();
+
+                // Transfer the platform fee to the fee address
+                payToken.safeTransfer(_feeAddress, _fee);
+
                 // Transfer the funds to the campaign's creator
-                payToken.safeTransfer(msg.sender, toReleaseAmount);
+                payToken.safeTransfer(msg.sender, toReleaseAmount - _fee);
             }
 
             uint256 toReleaseAmountUSD = (allCampaigns[_campaignId]
@@ -373,13 +384,17 @@ contract RaisyCampaigns is RaisyFundsRelease {
             for (uint256 index = 0; index < enabledTokens.length; index++) {
                 IERC20 payToken = IERC20(enabledTokens[index]);
 
+                uint256 toReleaseAmount = allCampaigns[_campaignId]
+                    .amountRaisedPerToken[enabledTokens[index]];
+
+                uint256 _fee = (toReleaseAmount * platformFee) / 100;
+                address _feeAddress = addressRegistry.feeAddress();
+
+                // Transfer the platform fee to the fee address
+                payToken.safeTransfer(_feeAddress, _fee);
+
                 // Transfer the funds to the campaign's creator
-                payToken.safeTransfer(
-                    msg.sender,
-                    allCampaigns[_campaignId].amountRaisedPerToken[
-                        enabledTokens[index]
-                    ]
-                );
+                payToken.safeTransfer(msg.sender, toReleaseAmount - _fee);
             }
         }
 
@@ -422,6 +437,12 @@ contract RaisyCampaigns is RaisyFundsRelease {
             uint256 toReleaseAmount = (allCampaigns[_campaignId]
                 .amountRaisedPerToken[enabledTokens[index]] * toReleasePct) /
                 10000;
+
+            uint256 _fee = (toReleaseAmount * platformFee) / 100;
+            address _feeAddress = addressRegistry.feeAddress();
+
+            // Transfer the platform fee to the fee address
+            payToken.safeTransfer(_feeAddress, _fee);
 
             // Transfer the funds to the campaign's creator
             payToken.safeTransfer(msg.sender, toReleaseAmount);
@@ -530,6 +551,16 @@ contract RaisyCampaigns is RaisyFundsRelease {
         raisyChef.claimRewards(msg.sender, _campaignId);
 
         emit WithdrawFunds(_campaignId, msg.sender, refundAmount, _payToken);
+    }
+
+    /**
+     * @notice Update platformFee
+     * @dev Only admin
+     */
+    function updatePlatformFee(uint256 _platformFee) external onlyOwner {
+        platformFee = _platformFee;
+
+        emit PlatformFeeUpdated(_platformFee);
     }
 
     ///
