@@ -7,7 +7,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./RaisyFundsRelease.sol";
 import "./interfaces/IRaisyTokenRegistry.sol";
+import "hardhat/console.sol";
 
+///@notice Interfaces declaration
 interface IRaisyChef {
     function add(uint256, uint256) external;
 
@@ -78,6 +80,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
     );
 
     event MoreFundsAsked(uint256 campaignId, address indexed creator);
+
+    event addNbUnsuccessful(uint256 campaignId, uint256 nbUnsuccessfulVotes);
+
+    event stageRefund(uint256 campaignId, uint256 stage);
 
     /// @notice Structure for a campaign
     struct Campaign {
@@ -170,6 +176,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
     }
 
     /// @notice Add a campaign without any release schedule
+    /// @param _duration Duration of the campaign
+    /// @param _amountToRaise Amount needed by the creator
     function addCampaign(uint256 _duration, uint256 _amountToRaise) external {
         require(_duration <= maxDuration, "duration too long");
         require(_duration >= minDuration, "duration too short");
@@ -211,6 +219,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
     }
 
     /// @notice Add campaign with a release schedule
+    /// @param _duration Duration of the campaign
+    /// @param _amountToRaise Amount needed by the creator
+    /// @param _nbMilestones Number of milestones for the release schedule
+    /// @param _pctReleasePerMilestone Array of the corresponding percentage of the funds released per milestone
     function addCampaign(
         uint256 _duration,
         uint256 _amountToRaise,
@@ -259,6 +271,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
         );
     }
 
+    /// @notice Enable the users to make a donation
+    /// @param _campaignId Id of the campaign
+    /// @param _amount Amount of the donation
+    /// @param _payToken Currency used to pay
     function donate(
         uint256 _campaignId,
         uint256 _amount,
@@ -304,16 +320,18 @@ contract RaisyCampaigns is RaisyFundsRelease {
         emit NewDonation(_campaignId, msg.sender, amountInUSD, _payToken);
     }
 
+    /// @notice enable the user to claim his proof of donation
+    /// @param _campaignId Id of the campaign.
     function claimProofOfDonation(uint256 _campaignId)
         external
         exists(_campaignId)
         nonReentrant
     {
         require(allCampaigns[_campaignId].isOver, "Campaign is not over.");
-        // require(
-        //     userDonations[msg.sender][_campaignId].amountInUSD > 0,
-        //     "No PoD to claim."
-        // );
+        require(
+            userDonations[msg.sender][_campaignId].amountInUSD > 0,
+            "No PoD to claim."
+        );
         require(!podClaimed[_campaignId][msg.sender], "PoD already claimed.");
 
         // Mint Raisy NFT
@@ -335,12 +353,13 @@ contract RaisyCampaigns is RaisyFundsRelease {
         emit ProofOfDonationClaimed(_campaignId, msg.sender, tokenId);
     }
 
+    ///@notice Claim initial funds, changes the stage of the campaign and enable proof of donation.
+    ///@param _campaignId Id of the campaign.
     function claimInitialFunds(uint256 _campaignId)
         external
         exists(_campaignId)
         isOver(_campaignId)
         isSuccess(_campaignId)
-        onlyCreator(_campaignId)
         nonReentrant
     {
         require(
@@ -364,14 +383,17 @@ contract RaisyCampaigns is RaisyFundsRelease {
                     .amountRaisedPerToken[enabledTokens[index]] *
                     toReleasePct) / 10000;
 
-                uint256 _fee = (toReleaseAmount * platformFee) / 100;
+                uint256 _fee = (toReleaseAmount * platformFee) / 1000;
                 address _feeAddress = addressRegistry.feeAddress();
 
                 // Transfer the platform fee to the fee address
                 payToken.safeTransfer(_feeAddress, _fee);
 
                 // Transfer the funds to the campaign's creator
-                payToken.safeTransfer(msg.sender, toReleaseAmount - _fee);
+                payToken.safeTransfer(
+                    allCampaigns[_campaignId].creator,
+                    toReleaseAmount - _fee
+                );
             }
 
             uint256 toReleaseAmountUSD = (allCampaigns[_campaignId]
@@ -387,14 +409,17 @@ contract RaisyCampaigns is RaisyFundsRelease {
                 uint256 toReleaseAmount = allCampaigns[_campaignId]
                     .amountRaisedPerToken[enabledTokens[index]];
 
-                uint256 _fee = (toReleaseAmount * platformFee) / 100;
+                uint256 _fee = (toReleaseAmount * platformFee) / 10000;
                 address _feeAddress = addressRegistry.feeAddress();
 
                 // Transfer the platform fee to the fee address
                 payToken.safeTransfer(_feeAddress, _fee);
 
                 // Transfer the funds to the campaign's creator
-                payToken.safeTransfer(msg.sender, toReleaseAmount - _fee);
+                payToken.safeTransfer(
+                    allCampaigns[_campaignId].creator,
+                    toReleaseAmount - _fee
+                );
             }
         }
 
@@ -402,17 +427,18 @@ contract RaisyCampaigns is RaisyFundsRelease {
         allCampaigns[_campaignId].isOver = true;
 
         // Emit the claim event
-        emit FundsClaimed(_campaignId, msg.sender);
+        emit FundsClaimed(_campaignId, allCampaigns[_campaignId].creator);
     }
 
-    /// @notice If donors voted YES to transfer the next portion of funds
-    /// then the creator can come up and call this function to claim the funds
-    function claimNextFunds(uint256 _campaignId)
-        external
+    /// @notice Transfer the tokens to the Campaign owner
+    /// @dev private function called by ensVoteSession only if the participants voted yes in majority
+    /// @param _campaignId Id of the campaign
+    /// @param _campaignCreator Address of the owner of the campaign
+    function claimNextFunds(uint256 _campaignId, address _campaignCreator)
+        private
         exists(_campaignId)
         isOver(_campaignId)
         isSuccess(_campaignId)
-        onlyCreator(_campaignId)
         nonReentrant
     {
         require(
@@ -421,7 +447,6 @@ contract RaisyCampaigns is RaisyFundsRelease {
             "No more funds to claim."
         );
         require(allCampaigns[_campaignId].isOver, "Initial funds not claimed.");
-        require(endVoteSession(_campaignId), "Vote didn't pass.");
 
         IRaisyTokenRegistry tokenRegistry = IRaisyTokenRegistry(
             addressRegistry.tokenRegistry()
@@ -438,14 +463,14 @@ contract RaisyCampaigns is RaisyFundsRelease {
                 .amountRaisedPerToken[enabledTokens[index]] * toReleasePct) /
                 10000;
 
-            uint256 _fee = (toReleaseAmount * platformFee) / 100;
+            uint256 _fee = (toReleaseAmount * platformFee) / 10000;
             address _feeAddress = addressRegistry.feeAddress();
 
             // Transfer the platform fee to the fee address
             payToken.safeTransfer(_feeAddress, _fee);
 
             // Transfer the funds to the campaign's creator
-            payToken.safeTransfer(msg.sender, toReleaseAmount);
+            payToken.safeTransfer(_campaignCreator, toReleaseAmount);
         }
 
         campaignFundsClaimed[_campaignId] +=
@@ -453,11 +478,52 @@ contract RaisyCampaigns is RaisyFundsRelease {
             10000;
 
         // Emit the claim event
-        emit FundsClaimed(_campaignId, msg.sender);
+        emit FundsClaimed(_campaignId, _campaignCreator);
+    }
+
+    /**
+     * @notice Ends the vote session, pays the campaign owner or increase the number of unsuccessful votes.
+     * @param _campaignId Id of the campaign
+     */
+    function endVoteSession(uint256 _campaignId)
+        external
+        atStage(_campaignId, Stages.Release)
+    {
+        require(
+            voteSession[_campaignId].inProgress,
+            "Vote session not in progress."
+        );
+        require(
+            _getBlock() >=
+                voteSession[_campaignId].startBlock + VOTE_SESSION_DURATION,
+            "Vote session not ended."
+        );
+
+        voteSession[_campaignId].inProgress = false;
+        voteSession[_campaignId].id++;
+
+        if (voteSession[_campaignId].voteRatio >= 0) {
+            voteSession[_campaignId].numUnsuccessfulVotes = 0;
+            claimNextFunds(_campaignId, allCampaigns[_campaignId].creator);
+        } else {
+            voteSession[_campaignId].numUnsuccessfulVotes++;
+            emit addNbUnsuccessful(
+                _campaignId,
+                voteSession[_campaignId].numUnsuccessfulVotes
+            );
+            if (voteSession[_campaignId].numUnsuccessfulVotes == 3) {
+                campaignSchedule[_campaignId].releaseStage = Stages.Refund;
+                emit stageRefund(
+                    _campaignId,
+                    uint8(campaignSchedule[_campaignId].releaseStage)
+                );
+            }
+        }
     }
 
     /// @notice The creator can come up at anytime during his campaign to ask for more funds
-    /// This initializes a vote session in the RaisyFundsRelease contract
+    /// @dev This initializes a vote session in the RaisyFundsRelease contract
+    /// @param _campaignId Id of the campaign
     function askMoreFunds(uint256 _campaignId)
         external
         exists(_campaignId)
@@ -478,6 +544,9 @@ contract RaisyCampaigns is RaisyFundsRelease {
         emit MoreFundsAsked(_campaignId, msg.sender);
     }
 
+    /// @notice Enables an user to get their funds back if the majority voted so.
+    /// @param _campaignId Id of the campaign
+    /// @param _payToken Address of the token
     function getFundsBack(uint256 _campaignId, address _payToken)
         external
         exists(_campaignId)
@@ -514,6 +583,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
     }
 
     /// @notice The campaign didn't reach its objective -> the donor can withdraw his funds and claim rewards
+    /// @param _campaignId Id of the campaign
+    /// @param _payToken Address of the token
     function withdrawFunds(uint256 _campaignId, address _payToken)
         external
         exists(_campaignId)
@@ -571,6 +642,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     // }
 
+    /// @notice Sees if the Token address is valid
+    /// @param _payToken Address of the token
     function _validPayToken(address _payToken) internal view {
         require(
             _payToken == address(0) ||
@@ -583,7 +656,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     /**
      @notice Method for getting price for pay token
-     @param _payToken Paying token
+     @param _payToken Address of the token
      */
     function getPrice(address _payToken) public view returns (int256, uint8) {
         int256 unitPrice;
@@ -606,6 +679,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
         return (unitPrice, decimals);
     }
 
+    /// @notice Returns the amount Donated by an address for a given token and campaign.
+    /// @param _donor Address of the donor
+    /// @param _campaignId Id of the campaign
+    /// @param _payToken Address of the token
     function getAmountDonated(
         address _donor,
         uint256 _campaignId,

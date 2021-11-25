@@ -20,8 +20,6 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
     /// @notice tokenId -> Donation Info
     mapping(uint256 => DonationInfo) private _donationInfo;
 
-    /// @notice campaign ID -> Donation Info
-
     struct DonationInfo {
         uint256 amount;
         address tokenUsed;
@@ -37,9 +35,9 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
     {}
 
     /**
-     * @dev Mints a new Proof Of Donation
+     * @notice Mints a new Proof Of Donation
+     * @param params Info of the donation
      */
-
     function mint(DonationInfo calldata params)
         external
         onlyOwner
@@ -55,6 +53,8 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
         return newTokenId;
     }
 
+    /// @notice Returns the donation info of a given Token
+    /// @param _tokenId Id of the token
     function getDonationInfo(uint256 _tokenId)
         external
         view
@@ -64,7 +64,7 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
     }
 
     /**
-    @notice Burns a tNFT
+    @notice Burns a NFT
     @dev Only the owner or an approved sender can call this method
     @param _tokenId the token ID to burn and the mapping too
     */

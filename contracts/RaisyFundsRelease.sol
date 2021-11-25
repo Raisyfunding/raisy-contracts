@@ -315,40 +315,6 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         );
     }
 
-    /**
-     * @notice Ends the vote session, pays the campaign owner or increase the number of unsuccessful votes.
-     * @param _campaignId Id of the campaign
-     */
-    function endVoteSession(uint256 _campaignId)
-        internal
-        atStage(_campaignId, Stages.Release)
-        returns (bool)
-    {
-        require(
-            voteSession[_campaignId].inProgress,
-            "Vote session not in progress."
-        );
-        require(
-            _getBlock() >=
-                voteSession[_campaignId].startBlock + VOTE_SESSION_DURATION,
-            "Vote session not ended."
-        );
-
-        voteSession[_campaignId].inProgress = false;
-        voteSession[_campaignId].id++;
-
-        if (voteSession[_campaignId].voteRatio >= 0) {
-            voteSession[_campaignId].numUnsuccessfulVotes = 0;
-            return true;
-        } else {
-            voteSession[_campaignId].numUnsuccessfulVotes++;
-            if (voteSession[_campaignId].numUnsuccessfulVotes == 3) {
-                campaignSchedule[_campaignId].releaseStage = Stages.Refund;
-            }
-            return false;
-        }
-    }
-
     function voteRefund(uint256 _campaignId)
         external
         atStage(_campaignId, Stages.Release)
