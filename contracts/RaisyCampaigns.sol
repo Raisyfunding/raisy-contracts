@@ -23,7 +23,7 @@ interface IRaisyChef {
 }
 
 interface IRaisyPriceFeed {
-    function wAVAX() external view returns (address);
+    function wMATIC() external view returns (address);
 
     function getPrice(address) external view returns (int256, uint8);
 }
@@ -105,8 +105,8 @@ contract RaisyCampaigns is RaisyFundsRelease {
     }
 
     /// @notice Maximum and Minimum campaigns' duration
-    uint256 public maxDuration = 200;
-    uint256 public minDuration = 20;
+    uint256 public maxDuration = 200000;
+    uint256 public minDuration = 1800;
 
     // @notice Platform Fee
     uint256 public platformFee = 250;
@@ -666,7 +666,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
         );
 
         if (_payToken == address(0)) {
-            (unitPrice, decimals) = priceFeed.getPrice(priceFeed.wAVAX());
+            (unitPrice, decimals) = priceFeed.getPrice(priceFeed.wMATIC());
         } else {
             (unitPrice, decimals) = priceFeed.getPrice(_payToken);
         }

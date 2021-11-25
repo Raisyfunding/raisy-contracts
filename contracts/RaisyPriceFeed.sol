@@ -20,12 +20,12 @@ contract RaisyPriceFeed is Ownable {
     /// @notice Raisy address registry contract
     address public addressRegistry;
 
-    /// @notice wrapped AVAX contract
-    address public wAVAX;
+    /// @notice wrapped MATIC contract
+    address public wMATIC;
 
-    constructor(address _addressRegistry, address _wAVAX) {
+    constructor(address _addressRegistry, address _wMATIC) {
         addressRegistry = _addressRegistry;
-        wAVAX = _wAVAX;
+        wMATIC = _wMATIC;
     }
 
     /**
