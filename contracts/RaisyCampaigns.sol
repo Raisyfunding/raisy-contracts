@@ -81,7 +81,11 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     event MoreFundsAsked(uint256 campaignId, address indexed creator);
 
-    event EndVoteSession(uint256 campaignId, uint256 numUnsuccessfulVotes);
+    event EndVoteSession(
+        uint256 campaignId,
+        uint256 id,
+        uint256 numUnsuccessfulVotes
+    );
 
     /// @notice Structure for a campaign
     struct Campaign {
@@ -104,7 +108,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     /// @notice Maximum and Minimum campaigns' duration
     uint256 public maxDuration = 200000;
-    uint256 public minDuration = 1800;
+    uint256 public minDuration = 40;
 
     // @notice Platform Fee
     uint256 public platformFee = 250;
@@ -381,7 +385,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
                     .amountRaisedPerToken[enabledTokens[index]] *
                     toReleasePct) / 10000;
 
-                uint256 _fee = (toReleaseAmount * platformFee) / 1000;
+                uint256 _fee = (toReleaseAmount * platformFee) / 10000;
                 address _feeAddress = addressRegistry.feeAddress();
 
                 // Transfer the platform fee to the fee address
@@ -513,6 +517,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
         emit EndVoteSession(
             _campaignId,
+            voteSession[_campaignId].id,
             voteSession[_campaignId].numUnsuccessfulVotes
         );
     }

@@ -48,9 +48,14 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     event VoteSessionDurationUpdated(uint256 newAddressRegistry);
 
-    event VoteSessionInitialized(uint256 campaignId);
+    event VoteSessionInitialized(uint256 campaignId, uint256 id);
 
-    event NewVote(uint256 campaignId, address indexed voter, int256 voteRatio);
+    event NewVote(
+        uint256 campaignId,
+        uint256 id,
+        address indexed voter,
+        int256 voteRatio
+    );
 
     event VoteRefund(
         uint256 campaignId,
@@ -275,7 +280,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _voteSession.voteRatio = 0;
         _voteSession.numUnsuccessfulVotes = 0;
 
-        emit VoteSessionInitialized(_campaignId);
+        emit VoteSessionInitialized(_campaignId, _voteSession.id);
     }
 
     /**
@@ -310,6 +315,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         emit NewVote(
             _campaignId,
+            voteSession[_campaignId].id,
             msg.sender,
             voteSession[_campaignId].voteRatio
         );
