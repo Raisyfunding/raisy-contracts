@@ -81,9 +81,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
 
     event MoreFundsAsked(uint256 campaignId, address indexed creator);
 
-    event addNbUnsuccessful(uint256 campaignId, uint256 nbUnsuccessfulVotes);
-
-    event stageRefund(uint256 campaignId, uint256 stage);
+    event EndVoteSession(uint256 campaignId, uint256 numUnsuccessfulVotes);
 
     /// @notice Structure for a campaign
     struct Campaign {
@@ -507,18 +505,16 @@ contract RaisyCampaigns is RaisyFundsRelease {
             claimNextFunds(_campaignId, allCampaigns[_campaignId].creator);
         } else {
             voteSession[_campaignId].numUnsuccessfulVotes++;
-            emit addNbUnsuccessful(
-                _campaignId,
-                voteSession[_campaignId].numUnsuccessfulVotes
-            );
+
             if (voteSession[_campaignId].numUnsuccessfulVotes == 3) {
                 campaignSchedule[_campaignId].releaseStage = Stages.Refund;
-                emit stageRefund(
-                    _campaignId,
-                    uint8(campaignSchedule[_campaignId].releaseStage)
-                );
             }
         }
+
+        emit EndVoteSession(
+            _campaignId,
+            voteSession[_campaignId].numUnsuccessfulVotes
+        );
     }
 
     /// @notice The creator can come up at anytime during his campaign to ask for more funds
