@@ -676,7 +676,7 @@ contract RaisyCampaigns is RaisyFundsRelease {
             unitPrice = unitPrice / (int256(10)**(decimals - 18));
         }
 
-        return (unitPrice, decimals);
+        return (unitPrice, 18);
     }
 
     /// @notice Returns the amount Donated by an address for a given token and campaign.
