@@ -278,7 +278,7 @@ contract RaisyFundsRelease is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         _voteSession.inProgress = true;
         _voteSession.startBlock = _getBlock();
         _voteSession.voteRatio = 0;
-        _voteSession.numUnsuccessfulVotes = 0;
+        // _voteSession.numUnsuccessfulVotes = 0;
 
         emit VoteSessionInitialized(_campaignId, _voteSession.id);
     }
