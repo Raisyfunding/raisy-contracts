@@ -30,7 +30,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         //
         //   pending reward = (user.amount * pool.accRaisyPerShare) - user.rewardDebt
 
-        // In our case there is no user.rewardDebt because all the rewards at generated at once
+        // In our case there is no user.rewardDebt because all the rewards are generated at once
         // The user cannot harvest nor withdraw until the rewards have all been generated and
         // the associated campaign is over
         //
@@ -356,8 +356,8 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
         require(_amount > 0, "Amount must be greater than 0");
 
         PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        // UserGlobalInfo storage current = userGlobalInfo[msg.sender];
+        UserInfo storage user = userInfo[_pid][_from];
+        UserGlobalInfo storage current = userGlobalInfo[_from];
 
         // When a user deposits, we need to update the pool and harvest beforehand,
         // since the rates will change.
@@ -377,6 +377,7 @@ contract RaisyChef is Ownable, ReentrancyGuard, Authorizable {
 
         user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(pool.accRaisyPerShare).div(1e18);
+        current.globalAmount = current.globalAmount.add(_amount);
 
         emit Deposit(_from, _pid, _amount);
     }
