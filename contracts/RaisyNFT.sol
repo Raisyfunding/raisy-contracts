@@ -48,6 +48,8 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
 
         _donationInfo[newTokenId] = params;
 
+        _tokenIdCounter.increment();
+
         emit Minted(newTokenId, params);
 
         return newTokenId;
