@@ -1,6 +1,8 @@
-# Raisy Contracts
+# 📃Raisy Contracts
 
-This repository contains the smart contract architecture used in Raisy Funding.
+![Logo](https://testnet.raisy.io/logo.png)
+
+This repository contains the smart contract architecture used by Raisy Funding.
 
 Try running some of the following tasks:
 
