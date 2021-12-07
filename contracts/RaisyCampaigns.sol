@@ -110,10 +110,10 @@ contract RaisyCampaigns is RaisyFundsRelease {
     uint256 public maxDuration = 200000;
     uint256 public minDuration = 40;
 
-    // @notice Platform Fee
+    /// @notice Platform Fee
     uint256 public platformFee = 250;
 
-    /// @notice Latest campaign ID
+    // @notice Latest campaign ID
     CountersUpgradeable.Counter private _campaignIdCounter;
 
     /// @notice Campaign ID -> Campaign

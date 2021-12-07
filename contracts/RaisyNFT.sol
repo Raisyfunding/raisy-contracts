@@ -17,7 +17,7 @@ contract RaisyNFT is ERC721, ERC721Enumerable, Ownable {
 
     Counters.Counter private _tokenIdCounter;
 
-    /// @notice tokenId -> Donation Info
+    // @notice tokenId -> Donation Info
     mapping(uint256 => DonationInfo) private _donationInfo;
 
     struct DonationInfo {
